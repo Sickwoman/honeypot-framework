@@ -1,0 +1,72 @@
+name: Terraform Validate
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'terraform/**'
+      - '.github/workflows/terraform-validate.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'terraform/**'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        environment:
+          - terraform/environments/local
+          - terraform/environments/aws-us-east
+          - terraform/environments/aws-eu-west
+          - terraform/environments/aws-ap-south
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.0
+      
+      - name: Terraform Init
+        run: terraform -chdir=${{ matrix.environment }} init -backend=false
+      
+      - name: Terraform Format Check
+        run: terraform -chdir=${{ matrix.environment }} fmt -check
+        continue-on-error: true
+      
+      - name: Terraform Validate
+        run: terraform -chdir=${{ matrix.environment }} validate
+
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Run TFLint
+        uses: terraform-linters/setup-tflint@v3
+      
+      - name: Init TFLint
+        run: tflint --init
+      
+      - name: Run TFLint checks
+        run: tflint -f compact terraform/
+        continue-on-error: true
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Terraform Docs
+        uses: terraform-docs/gh-actions@main
+        with:
+          working-dir: terraform
+          output-file: README.md
+          output-method: inject
+          git-push: false

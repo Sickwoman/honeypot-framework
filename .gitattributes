@@ -1,0 +1,25 @@
+# Auto detect text files and normalize line endings to LF
+* text=auto
+
+# Source code
+*.tf text eol=lf
+*.py text eol=lf
+*.sh text eol=lf
+*.bash text eol=lf
+
+# Configuration files
+*.conf text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+*.toml text eol=lf
+
+# Documentation
+*.md text eol=lf
+*.txt text eol=lf
+*.rst text eol=lf
+
+# Don't normalize these
+*.tfstate binary
+*.tfstate.* binary
+*.lock.hcl binary
