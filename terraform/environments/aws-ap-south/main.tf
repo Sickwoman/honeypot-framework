@@ -1,17 +1,11 @@
 terraform {
   required_version = ">= 1.0"
-  
   required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
-    }
+    aws = { source = "hashicorp/aws", version = "~> 5.0" }
   }
 }
 
-provider "aws" {
-  region = "ap-south-1"
-}
+provider "aws" { region = "ap-south-1" }
 
 data "aws_region" "current" {}
 data "aws_caller_identity" "current" {}
@@ -19,32 +13,36 @@ data "aws_caller_identity" "current" {}
 locals {
   environment = "aws-ap-south"
   region      = "ap-south-1"
-  region_name = "Asia Pacific (Mumbai)"
-  
-  common_tags = {
-    Environment = local.environment
-    Region      = local.region
-    Project     = "honeypot-framework"
-    ManagedBy   = "Terraform"
-  }
 }
 
-output "aws_region" {
-  description = "AWS region deployed to"
-  value       = data.aws_region.current.name
+module "vpc" {
+  source = "../../modules/aws-vpc"
+  environment = local.environment
+  region = local.region
+  vpc_cidr = var.vpc_cidr
+  honeypot_subnet_cidr = var.honeypot_subnet_cidr
 }
 
-output "aws_account_id" {
-  description = "AWS account ID"
-  value       = data.aws_caller_identity.current.account_id
+module "security_group" {
+  source = "../../modules/aws-security-group"
+  environment = local.environment
+  vpc_id = module.vpc.vpc_id
+  allowed_ssh_cidr = var.allowed_ssh_cidr
 }
 
-output "deployment_summary" {
-  description = "Phase 3 deployment summary"
-  value = {
-    environment = local.environment
-    region      = local.region
-    region_name = local.region_name
-    status      = "Ready for deployment"
-  }
+module "cloudwatch" {
+  source = "../../modules/aws-cloudwatch"
+  environment = local.environment
+  log_retention_days = var.log_retention_days
 }
+
+module "s3" {
+  source = "../../modules/aws-s3"
+  environment = local.environment
+  region = local.region
+  log_retention_days = var.log_retention_days
+}
+
+output "aws_account_id" { value = data.aws_caller_identity.current.account_id }
+output "vpc_id" { value = module.vpc.vpc_id }
+output "security_group_id" { value = module.security_group.security_group_id }

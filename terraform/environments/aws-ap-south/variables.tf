@@ -1,35 +1,33 @@
-variable "aws_region" {
-  description = "AWS region"
-  type        = string
-  default     = "ap-south-1"
-}
-
 variable "vpc_cidr" {
-  description = "VPC CIDR block"
-  type        = string
-  default     = "10.2.0.0/16"
+  type    = string
+  default = "10.2.0.0/16"
 }
 
 variable "honeypot_subnet_cidr" {
-  description = "Honeypot subnet CIDR"
-  type        = string
-  default     = "10.2.1.0/24"
+  type    = string
+  default = "10.2.1.0/24"
 }
 
 variable "instance_type" {
-  description = "EC2 instance type for honeypots"
-  type        = string
-  default     = "t3.micro"
+  type    = string
+  default = "t3.micro"
 }
 
 variable "honeypot_count" {
-  description = "Number of honeypot instances to deploy"
-  type        = number
-  default     = 1
+  type    = number
+  default = 1
 }
 
-variable "enable_detailed_monitoring" {
-  description = "Enable detailed CloudWatch monitoring"
-  type        = bool
-  default     = true
+variable "key_pair_name" {
+  type = string
+}
+
+variable "allowed_ssh_cidr" {
+  type    = string
+  default = "0.0.0.0/0"
+}
+
+variable "log_retention_days" {
+  type    = number
+  default = 30
 }
