@@ -59,9 +59,7 @@ resource "aws_instance" "honeypot" {
   # CloudWatch agent for logging
   iam_instance_profile = aws_iam_instance_profile.honeypot.name
 
-  user_data = base64encode(templatefile("${path.module}/user_data.sh", {
-    environment = var.environment
-  }))
+  user_data = base64encode(file("${path.module}/user_data.sh"))
 
   monitoring = true
 
@@ -70,9 +68,11 @@ resource "aws_instance" "honeypot" {
     Environment = var.environment
     Role        = "honeypot"
   }
+
+  depends_on = [aws_iam_role_policy.honeypot_logs]
 }
 
-# IAM role for CloudWatch and S3 access
+# IAM role for honeypot instance
 resource "aws_iam_role" "honeypot" {
   name_prefix = "${var.environment}-honeypot-"
 
@@ -88,16 +88,40 @@ resource "aws_iam_role" "honeypot" {
       }
     ]
   })
+
+  tags = {
+    Environment = var.environment
+  }
 }
 
-resource "aws_iam_role_policy_attachment" "cloudwatch_logs" {
-  role       = aws_iam_role.honeypot.name
-  policy_arn = "arn:aws:iam::aws:policy/CloudWatchLogsAgentServerPolicy"
-}
+# Least-privilege policy for CloudWatch Logs
+resource "aws_iam_role_policy" "honeypot_logs" {
+  name_prefix = "${var.environment}-honeypot-logs-"
+  role        = aws_iam_role.honeypot.id
 
-resource "aws_iam_role_policy_attachment" "cloudwatch_agent" {
-  role       = aws_iam_role.honeypot.name
-  policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "CreateLogGroupAndStream"
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "arn:aws:logs:*:*:/aws/honeypot/*"
+      },
+      {
+        Sid    = "DescribeLogGroups"
+        Effect = "Allow"
+        Action = [
+          "logs:DescribeLogGroups"
+        ]
+        Resource = "arn:aws:logs:*:*:log-group:/aws/honeypot/*"
+      }
+    ]
+  })
 }
 
 resource "aws_iam_instance_profile" "honeypot" {
@@ -106,13 +130,16 @@ resource "aws_iam_instance_profile" "honeypot" {
 }
 
 output "instance_ids" {
-  value = aws_instance.honeypot[*].id
+  value       = aws_instance.honeypot[*].id
+  description = "IDs of honeypot instances"
 }
 
 output "instance_ips" {
-  value = aws_instance.honeypot[*].public_ip
+  value       = aws_instance.honeypot[*].public_ip
+  description = "Public IPs of honeypot instances"
 }
 
 output "ami_id" {
-  value = data.aws_ami.ubuntu.id
+  value       = data.aws_ami.ubuntu.id
+  description = "AMI ID used for instances"
 }

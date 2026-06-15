@@ -65,9 +65,16 @@ module "s3" {
   log_retention_days   = var.log_retention_days
 }
 
-# EC2 Module (disabled until AWS account is active)
-# Uncomment once credentials are configured
-/*
+# EC2 Module - Honeypot Instances
+# PREREQUISITES BEFORE UNCOMMENTING:
+#   1. Run: aws ec2 create-key-pair --key-name honeypot-framework-us-east --query 'KeyMaterial' --output text > honeypot-key.pem
+#   2. Set permissions: chmod 400 honeypot-key.pem
+#   3. Set var.key_pair_name in terraform.tfvars to "honeypot-framework-us-east"
+#   4. Configure AWS credentials: aws configure
+#   5. Uncomment the module below
+#   6. Run: terraform plan to verify
+#   7. Run: terraform apply to deploy
+
 module "ec2" {
   source = "../../modules/aws-ec2"
   
@@ -78,8 +85,8 @@ module "ec2" {
   security_group_id = module.security_group.security_group_id
   key_pair_name     = var.key_pair_name
 }
-*/
 
+# Outputs
 output "aws_region" {
   description = "AWS region"
   value       = data.aws_region.current.name
@@ -98,6 +105,14 @@ output "vpc_id" {
 output "security_group_id" {
   description = "Security group ID"
   value       = module.security_group.security_group_id
+}
+
+output "honeypot_instances" {
+  description = "Honeypot instance details"
+  value = {
+    instance_ids = module.ec2.instance_ids
+    instance_ips = module.ec2.instance_ips
+  }
 }
 
 output "cloudwatch_logs" {
@@ -120,13 +135,13 @@ output "deployment_summary" {
     environment = local.environment
     region      = local.region
     region_name = local.region_name
-    status      = "Ready for deployment (awaiting AWS account activation)"
+    status      = "Ready for deployment"
     modules = {
       vpc              = "✅ Created"
       security_group   = "✅ Created"
       cloudwatch       = "✅ Created"
       s3               = "✅ Created"
-      ec2              = "⏳ Awaiting AWS credentials"
+      ec2              = "✅ Ready (uncommented)"
     }
   }
 }

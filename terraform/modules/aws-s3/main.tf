@@ -16,12 +16,13 @@ variable "log_retention_days" {
   default     = 90
 }
 
-# S3 bucket for honeypot logs
+# S3 bucket for honeypot logs (globally unique name with region)
 resource "aws_s3_bucket" "honeypot_logs" {
-  bucket_prefix = "${var.environment}-honeypot-logs-"
+  bucket_prefix = "${var.environment}-honeypot-logs-${var.region}-"
 
   tags = {
     Environment = var.environment
+    Region      = var.region
     Purpose     = "Honeypot log storage"
   }
 }
