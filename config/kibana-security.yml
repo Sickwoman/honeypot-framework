@@ -1,0 +1,35 @@
+# Kibana Security Configuration
+
+# Enable X-Pack security
+xpack.security.enabled: true
+
+# Elasticsearch connection with credentials
+elasticsearch.hosts: ["https://elasticsearch:9200"]
+elasticsearch.username: "elastic"
+elasticsearch.password: "changeme"
+elasticsearch.ssl.verificationMode: "certificate"
+elasticsearch.ssl.certificateAuthorities: ["/usr/share/kibana/config/certs/ca.crt"]
+
+# Kibana server security
+server.ssl.enabled: true
+server.ssl.certificate: "/usr/share/kibana/config/certs/kibana.crt"
+server.ssl.key: "/usr/share/kibana/config/certs/kibana.key"
+
+# Session timeout (5 hours)
+xpack.security.session.idleTimeout: "18000s"
+xpack.security.session.lifespan: "43200s"
+
+# Authentication provider
+xpack.security.authc.providers:
+  basic.basic1:
+    order: 0
+    enabled: true
+
+# API key settings
+xpack.security.apiKeyService.enabled: true
+
+# Enable audit logging
+xpack.security.audit.enabled: true
+xpack.security.audit.appender.file.type: file
+xpack.security.audit.appender.file.fileName: "/var/log/kibana/audit.log"
+

@@ -1,0 +1,40 @@
+# Elasticsearch Security Configuration
+
+# Enable X-Pack Security
+xpack.security.enabled: true
+
+# Enable encryption for HTTP communication
+xpack.security.http.ssl.enabled: true
+xpack.security.http.ssl.keystore.path: "certs/elasticsearch.p12"
+xpack.security.http.ssl.keystore.password: "changeme"
+xpack.security.http.ssl.truststore.path: "certs/elasticsearch.p12"
+xpack.security.http.ssl.truststore.password: "changeme"
+
+# Enable encryption for node-to-node communication
+xpack.security.transport.ssl.enabled: true
+xpack.security.transport.ssl.keystore.path: "certs/elasticsearch.p12"
+xpack.security.transport.ssl.keystore.password: "changeme"
+xpack.security.transport.ssl.truststore.path: "certs/elasticsearch.p12"
+xpack.security.transport.ssl.truststore.password: "changeme"
+
+# Default user passwords
+# Username: elastic, Password: changeme (CHANGE THIS!)
+
+# Enable audit logging
+xpack.security.audit.enabled: true
+xpack.security.audit.logfile.level: info
+xpack.security.audit.logfile.events.include:
+  - authentication_success
+  - authentication_failure
+  - unauthorized_access
+  - access_granted
+  - access_denied
+
+# API key expiration (90 days)
+xpack.security.authc.api_key.provider: file
+
+# Built-in users
+# elastic - superuser
+# kibana_system - for Kibana
+# logstash_system - for Logstash
+
