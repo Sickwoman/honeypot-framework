@@ -1,0 +1,95 @@
+{
+  "dashboards": [
+    {
+      "id": "attack-overview",
+      "title": "🎯 Attack Overview Dashboard",
+      "description": "Real-time attack statistics and trends",
+      "visualizations": [
+        {
+          "id": "total-attacks",
+          "type": "metric",
+          "title": "Total Attacks (24h)",
+          "query": "GET honeypot-*/_count"
+        },
+        {
+          "id": "top-attacking-ips",
+          "type": "table",
+          "title": "Top 10 Attacking IPs",
+          "query": "terms aggregation on src_ip"
+        },
+        {
+          "id": "attacks-by-service",
+          "type": "pie",
+          "title": "Attacks by Service",
+          "query": "terms aggregation on service"
+        },
+        {
+          "id": "attack-timeline",
+          "type": "line",
+          "title": "Attack Timeline (24h)",
+          "query": "date_histogram by 1h"
+        },
+        {
+          "id": "geographic-distribution",
+          "type": "map",
+          "title": "Geographic Attack Distribution",
+          "query": "geoip.country_name aggregation"
+        }
+      ]
+    },
+    {
+      "id": "security-analysis",
+      "title": "🔐 Security Analysis Dashboard",
+      "description": "Detailed security metrics and analysis",
+      "visualizations": [
+        {
+          "id": "failed-logins",
+          "type": "metric",
+          "title": "Failed Login Attempts (24h)"
+        },
+        {
+          "id": "credentials-captured",
+          "type": "table",
+          "title": "Captured Credentials"
+        },
+        {
+          "id": "malware-attempts",
+          "type": "metric",
+          "title": "Malware Download Attempts"
+        },
+        {
+          "id": "port-scans",
+          "type": "metric",
+          "title": "Port Scan Detections"
+        }
+      ]
+    },
+    {
+      "id": "performance-monitoring",
+      "title": "⚡ Performance Monitoring Dashboard",
+      "description": "System performance and health metrics",
+      "visualizations": [
+        {
+          "id": "indexing-rate",
+          "type": "line",
+          "title": "Indexing Rate (docs/sec)"
+        },
+        {
+          "id": "query-latency",
+          "type": "line",
+          "title": "Query Latency (ms)"
+        },
+        {
+          "id": "elasticsearch-health",
+          "type": "gauge",
+          "title": "Elasticsearch Health"
+        },
+        {
+          "id": "disk-usage",
+          "type": "gauge",
+          "title": "Disk Usage"
+        }
+      ]
+    }
+  ]
+}
