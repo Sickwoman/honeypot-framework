@@ -1,0 +1,42 @@
+# AbuseIPDB Configuration
+
+# API Settings
+api:
+  base_url: "https://api.abuseipdb.com/api/v2"
+  timeout: 10
+  max_retries: 3
+
+# Cache Settings
+cache:
+  enabled: true
+  ttl: 86400  # 24 hours
+  max_entries: 10000
+
+# Alert Thresholds
+thresholds:
+  high_risk: 75      # Confidence score >= 75
+  medium_risk: 50    # Confidence score >= 50
+  low_risk: 25       # Confidence score >= 25
+
+# Reporting
+reporting:
+  enabled: true
+  auto_report: false  # Don't auto-report, manual review first
+  categories:
+    - "Hacking"
+    - "Brute-Force"
+    - "SSH"
+    - "Malware"
+    - "Port Scanning"
+
+# Integration
+integration:
+  elasticsearch: true
+  slack: false
+  email: false
+
+# Logging
+logging:
+  level: "INFO"
+  file: "/var/log/abuseipdb/abuseipdb.log"
+
