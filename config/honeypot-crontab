@@ -1,0 +1,66 @@
+# Honeypot Framework Automated Tasks
+# Add to crontab with: crontab -e and paste these lines
+
+# ============================================================================
+# BACKUP JOBS
+# ============================================================================
+
+# Daily backup at 2:00 AM
+0 2 * * * /home/moksh/Desktop/honeypot-framework/scripts/automated-backup.sh backup >> /var/log/honeypot-backup.log 2>&1
+
+# Weekly backup verification every Sunday at 3:00 AM
+0 3 * * 0 /home/moksh/Desktop/honeypot-framework/scripts/automated-backup.sh status >> /var/log/honeypot-backup.log 2>&1
+
+# ============================================================================
+# REPORT GENERATION
+# ============================================================================
+
+# Daily report at 9:00 AM
+0 9 * * * /home/moksh/Desktop/honeypot-framework/scripts/schedule-reports.sh daily >> /var/log/honeypot-reports.log 2>&1
+
+# Weekly report every Monday at 8:00 AM
+0 8 * * 1 /home/moksh/Desktop/honeypot-framework/scripts/schedule-reports.sh weekly >> /var/log/honeypot-reports.log 2>&1
+
+# Monthly report on 1st day of month at 7:00 AM
+0 7 1 * * /home/moksh/Desktop/honeypot-framework/scripts/schedule-reports.sh monthly >> /var/log/honeypot-reports.log 2>&1
+
+# ============================================================================
+# MONITORING & HEALTH CHECKS
+# ============================================================================
+
+# Health check every hour
+0 * * * * /home/moksh/Desktop/honeypot-framework/scripts/check-services.sh >> /var/log/honeypot-health.log 2>&1
+
+# Performance monitoring every 6 hours
+0 */6 * * * python3 /home/moksh/Desktop/honeypot-framework/scripts/monitor-performance.py >> /var/log/honeypot-performance.log 2>&1
+
+# ============================================================================
+# MAINTENANCE
+# ============================================================================
+
+# Cleanup old reports (>90 days) daily at 3:00 AM
+0 3 * * * find /home/moksh/honeypot-reports -name "*.pdf" -mtime +90 -delete
+
+# Cleanup old backups (handled by automated-backup.sh, but double-check weekly)
+0 4 * * 0 find /home/moksh/honeypot-backups -name "*.tar.gz" -mtime +30 -delete
+
+# Cleanup old logs (>60 days) daily at 4:00 AM
+0 4 * * * find /var/log/honeypot* -mtime +60 -delete
+
+# ============================================================================
+# THREAT INTELLIGENCE UPDATES
+# ============================================================================
+
+# Update threat intelligence from honeypot IPs daily at 10:00 AM
+0 10 * * * python3 /home/moksh/Desktop/honeypot-framework/scripts/abuseipdb-checker.py --honeypot >> /var/log/honeypot-threatintel.log 2>&1
+
+# ============================================================================
+# ELASTICSEARCH OPTIMIZATION
+# ============================================================================
+
+# Optimize Elasticsearch indices weekly (Sunday at 1:00 AM)
+0 1 * * 0 /home/moksh/Desktop/honeypot-framework/scripts/optimize-elasticsearch.sh all >> /var/log/honeypot-optimization.log 2>&1
+
+# Clear caches weekly (Wednesday at 2:00 AM)
+0 2 * * 3 /home/moksh/Desktop/honeypot-framework/scripts/optimize-elasticsearch.sh cache >> /var/log/honeypot-optimization.log 2>&1
+
