@@ -1,0 +1,68 @@
+{
+  "dashboard": {
+    "title": "🍯 Honeypot Framework Monitoring",
+    "tags": ["honeypot", "security"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "title": "Attack Rate (events/min)",
+        "targets": [
+          {
+            "expr": "honeypot_attack_rate"
+          }
+        ],
+        "type": "graph"
+      },
+      {
+        "title": "Total Events",
+        "targets": [
+          {
+            "expr": "honeypot_events_total"
+          }
+        ],
+        "type": "stat"
+      },
+      {
+        "title": "Unique Attacking IPs",
+        "targets": [
+          {
+            "expr": "honeypot_unique_ips"
+          }
+        ],
+        "type": "gauge"
+      },
+      {
+        "title": "Threat Levels",
+        "targets": [
+          {
+            "expr": "honeypot_threat_level_high",
+            "legendFormat": "HIGH"
+          },
+          {
+            "expr": "honeypot_threat_level_medium",
+            "legendFormat": "MEDIUM"
+          }
+        ],
+        "type": "piechart"
+      },
+      {
+        "title": "Cluster Health",
+        "targets": [
+          {
+            "expr": "elasticsearch_cluster_health_status"
+          }
+        ],
+        "type": "stat"
+      },
+      {
+        "title": "Elasticsearch Documents",
+        "targets": [
+          {
+            "expr": "elasticsearch_documents_total"
+          }
+        ],
+        "type": "graph"
+      }
+    ]
+  }
+}

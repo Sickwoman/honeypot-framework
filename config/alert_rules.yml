@@ -1,0 +1,58 @@
+groups:
+  - name: honeypot_alerts
+    interval: 30s
+    rules:
+      - alert: HighAttackVolume
+        expr: rate(honeypot_events_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High attack volume detected"
+          description: "Attack rate is {{ $value }} events/sec"
+
+      - alert: HighRiskIPDetected
+        expr: honeypot_threat_level_high > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "HIGH risk IP detected"
+          description: "{{ $value }} high-risk IPs detected"
+
+      - alert: ServiceDown
+        expr: up{job=~"cowrie|opencanary"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.job }} service is down"
+          description: "{{ $labels.job }} has been unreachable for 2 minutes"
+
+      - alert: HighMemoryUsage
+        expr: (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) < 0.2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is {{ $value | humanizePercentage }}"
+
+      - alert: DiskSpaceLow
+        expr: (node_filesystem_avail_bytes{fstype!~"tmpfs|fuse.lowerfs"} / node_filesystem_size_bytes) < 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low disk space"
+          description: "Available disk space is {{ $value | humanizePercentage }}"
+
+      - alert: ElasticsearchUnhealthy
+        expr: elasticsearch_cluster_health_status != 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Elasticsearch cluster unhealthy"
+          description: "Elasticsearch status is {{ $value }}"
+

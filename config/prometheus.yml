@@ -1,0 +1,36 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'honeypot-framework'
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - localhost:9093
+
+rule_files:
+  - 'alert_rules.yml'
+
+scrape_configs:
+  - job_name: 'elasticsearch'
+    static_configs:
+      - targets: ['localhost:9200']
+    basic_auth:
+      username: 'elastic'
+      password: 'changeme'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: '/_prometheus/metrics'
+
+  - job_name: 'node'
+    static_configs:
+      - targets: ['localhost:9100']
+
+  - job_name: 'honeypot-metrics'
+    static_configs:
+      - targets: ['localhost:8000']
+    scrape_interval: 10s
+
