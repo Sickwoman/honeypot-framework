@@ -1,0 +1,6 @@
+# Cowrie credential policy for the relay hop.
+# Accept `root` with ANY password so the forced relay always reaches the fake
+# shell. The attacker's REAL typed credentials are captured upstream by the
+# relay's PAM hook (-> cred_attempt event), so nothing is lost by accepting here.
+# Format: username:x:password  (* = any, ! = deny)
+root:x:*

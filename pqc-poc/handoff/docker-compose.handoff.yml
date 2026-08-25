@@ -1,0 +1,59 @@
+# =============================================================================
+# STEP 4 PROTOTYPE -- PQC front-end -> Cowrie hand-off (Option B, Docker-Compose)
+# =============================================================================
+#   attacker --PQC SSH (ML-KEM kex)--> relay (public :2225)
+#       relay: terminates the post-quantum handshake (logs kex_negotiated),
+#              captures the offered creds (PAM), accepts ANY username
+#              (libnss-ato), then ForceCommand-relays the session over an
+#              INTERNAL-ONLY network into Cowrie.
+#   cowrie: classical SSH, fake shell + command/TTY logging. NO host port.
+#
+#   docker compose -f docker-compose.handoff.yml up --build -d
+#   ./verify-handoff.sh
+#
+# Port map (avoids the 2222 collision with the base PoC + the EC2 Cowrie):
+#   2222 classical PoC / native EC2 Cowrie | 2223 hybrid | 2224 pqc-only
+#   2225 THIS relay (public)               | Cowrie here is internal-only
+#
+# STATUS: authored, NOT run here (no Docker on the dev machine).
+# =============================================================================
+
+services:
+  relay:
+    build:
+      context: ..                        # parent = pqc-poc/, so we reuse entrypoint.sh
+      dockerfile: handoff/Dockerfile.relay
+    image: pqc-relay:poc
+    container_name: pqc-hp-relay
+    depends_on: [cowrie]
+    ports: ["2225:2225"]                 # public PQC SSH front door
+    networks: [edge, deception]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    cap_add: [SETUID, SETGID, CHOWN, DAC_OVERRIDE]
+    volumes:
+      - handoff-logs:/var/log/pqc-honeypot
+    restart: unless-stopped
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "5" } }
+
+  cowrie:
+    image: cowrie/cowrie:latest
+    container_name: pqc-hp-cowrie
+    networks: [deception]                # INTERNAL ONLY -- no host port, no egress
+    expose: ["2222"]
+    volumes:
+      # Accept root/any-password so the forced relay always reaches the shell.
+      # (Attacker's REAL creds are captured upstream by the relay PAM hook.)
+      - ./cowrie/userdb.txt:/cowrie/cowrie-git/etc/userdb.txt:ro
+      - cowrie-var:/cowrie/cowrie-git/var
+    restart: unless-stopped
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "5" } }
+
+networks:
+  edge: {}                               # attacker-facing
+  deception:                             # relay <-> cowrie, isolated + no egress
+    internal: true
+
+volumes:
+  handoff-logs: {}
+  cowrie-var: {}

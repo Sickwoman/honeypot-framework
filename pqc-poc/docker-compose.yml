@@ -1,0 +1,65 @@
+# =============================================================================
+# Multi-variant PQC SSH honeypot -- A/B(/C) deployment
+# =============================================================================
+#   docker compose up --build -d       # runs classical (2222) + hybrid (2223)
+#   ./verify.sh                        # proves each variant negotiates as expected
+#
+# Both variants share one JSON event log (events are tagged by variant), which
+# Logstash tails -- see logstash-pqc.conf and the commented logstash service.
+# The pqc-only variant is opt-in (needs OQS-OpenSSH) -- see Dockerfile.pqc-only.
+# =============================================================================
+
+# Shared hardened runtime posture. If sshd fails to start on the FIRST build in
+# your environment, temporarily drop cap_drop/cap_add, confirm it runs, re-tighten.
+x-honeypot: &honeypot
+  image: pqc-honeypot:poc
+  build:
+    context: .
+    dockerfile: Dockerfile
+  security_opt:
+    - no-new-privileges:true
+  cap_drop: [ALL]
+  cap_add: [SETUID, SETGID, CHOWN, DAC_OVERRIDE]
+  read_only: true
+  tmpfs:
+    - /etc/ssh/keys:mode=700
+    - /run
+  volumes:
+    - pqc-logs:/var/log/pqc-honeypot
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "5" }
+
+services:
+  classical:
+    <<: *honeypot
+    container_name: pqc-hp-classical
+    environment: [VARIANT=classical]
+    ports: ["2222:2222"]
+
+  hybrid:
+    <<: *honeypot
+    container_name: pqc-hp-hybrid
+    environment: [VARIANT=hybrid]
+    ports: ["2223:2223"]
+
+  # --- opt-in: pure PQC-only variant (requires OQS-OpenSSH) ---
+  # pqc-only:
+  #   <<: *honeypot
+  #   build: { context: ., dockerfile: Dockerfile.pqc-only }
+  #   image: pqc-honeypot-oqs:poc
+  #   container_name: pqc-hp-pqc-only
+  #   environment: [VARIANT=pqc-only]
+  #   ports: ["2224:2224"]
+
+  # --- opt-in: ship events to Elasticsearch via the framework's pipeline ---
+  # logstash:
+  #   image: docker.elastic.co/logstash/logstash:8.15.3
+  #   volumes:
+  #     - ./logstash-pqc.conf:/usr/share/logstash/pipeline/logstash.conf:ro
+  #     - pqc-logs:/var/log/pqc-honeypot:ro
+  #   depends_on: [classical, hybrid]
+
+volumes:
+  pqc-logs:

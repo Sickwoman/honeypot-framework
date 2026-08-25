@@ -1,0 +1,10 @@
+# PAM stack for the PQC relay front-end (/etc/pam.d/sshd).
+# 1. pam_exec captures the offered password (expose_authtok feeds it on stdin)
+#    -- this is the credential-capture point of the hand-off.
+# 2. pam_permit then grants the login so ForceCommand can relay into Cowrie.
+# `optional` on the capture step means a hiccup there never blocks the hand-off.
+auth       optional   pam_exec.so quiet expose_authtok /usr/local/bin/capture-creds.sh
+auth       required   pam_permit.so
+account    required   pam_permit.so
+password   required   pam_permit.so
+session    required   pam_permit.so

@@ -1,0 +1,30 @@
+# =============================================================================
+# PQC-ONLY SSH honeypot -- pure post-quantum key exchange (OQS-OpenSSH)
+# =============================================================================
+# The classical/hybrid image uses stock OpenSSH, which CANNOT offer pure
+# (non-hybrid) PQC key exchange. This variant therefore builds on the Open
+# Quantum Safe OpenSSH image, which provides pure-PQC kex methods.
+#
+# STATUS: authored, NOT built/verified on the dev machine (no Docker there).
+# The image publishes ONLY the `latest` tag and was last pushed ~12 months ago,
+# so it may lag the repo (which is now a fork of OpenSSH 10.2). It is flagged
+# "NOT FIT FOR PRODUCTION" upstream -- acceptable for a research honeypot.
+# Kex names in sshd_config.pqc-only are verified against the repo, but this
+# older image may support only a subset -- confirm with `ssh -Q kex` in the
+# running image and trim KexAlgorithms to what it lists (sshd won't start otherwise).
+# =============================================================================
+
+# Only `latest` is published; pin by digest once confirmed (docker inspect ... | grep -i digest).
+FROM openquantumsafe/openssh:latest
+
+# The OQS image layout differs from Alpine; adjust paths if the build fails.
+COPY sshd_config.pqc-only /etc/ssh/sshd_config.pqc-only
+COPY entrypoint.sh        /usr/local/bin/entrypoint.sh
+RUN chmod 0755 /usr/local/bin/entrypoint.sh \
+    && mkdir -p /etc/ssh/keys /var/log/pqc-honeypot
+
+ENV VARIANT=pqc-only
+EXPOSE 2224
+
+# `sshd`/`ssh-keygen`/`nc` paths may differ on the OQS base; verify on first build.
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

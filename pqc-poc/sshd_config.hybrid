@@ -1,0 +1,48 @@
+# =============================================================================
+# HYBRID PQC SSH honeypot -- sshd configuration
+# =============================================================================
+# Offers post-quantum HYBRID key exchange (ML-KEM-768 / "Kyber" + a classical
+# curve) and logs the negotiated algorithm for every inbound connection.
+#
+# SCOPE NOTE: In current OpenSSH the post-quantum component exists ONLY in the
+# key exchange. Host-key signatures are still classical (ed25519/rsa/ecdsa) --
+# OpenSSH has not shipped ML-DSA ("Dilithium") host keys yet. That gap is
+# itself a research finding, not an oversight in this config.
+# =============================================================================
+
+Port 2223
+AddressFamily inet
+ListenAddress 0.0.0.0
+
+# --- Post-quantum hybrid key exchange (strongest / most research-relevant first) ---
+#   mlkem768x25519-sha256              ML-KEM-768 (Kyber) + X25519      [OpenSSH >= 9.9]
+#   sntrup761x25519-sha512@openssh.com Streamlined NTRU Prime + X25519  [OpenSSH >= 8.5]
+#   curve25519-sha256                  classical fallback, so we still complete a
+#                                      handshake with non-PQC clients and log THAT.
+KexAlgorithms mlkem768x25519-sha256,sntrup761x25519-sha512@openssh.com,curve25519-sha256
+
+HostKey /etc/ssh/keys/ssh_host_ed25519_key
+HostKeyAlgorithms ssh-ed25519
+Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com
+MACs    hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com
+
+# --- Honeypot posture: complete the KEX, log it, then let auth fail ---
+PermitRootLogin            no
+PasswordAuthentication     yes
+PermitEmptyPasswords       no
+PubkeyAuthentication       no
+KbdInteractiveAuthentication no
+MaxAuthTries               3
+MaxSessions                2
+LoginGraceTime             20
+AllowTcpForwarding         no
+AllowAgentForwarding       no
+X11Forwarding              no
+PermitTunnel               no
+PermitTTY                  no
+PermitUserRC               no
+Subsystem sftp             /bin/false
+
+LogLevel       DEBUG1
+SyslogFacility AUTH
+StrictModes    yes
