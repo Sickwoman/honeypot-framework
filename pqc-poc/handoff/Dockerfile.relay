@@ -1,0 +1,44 @@
+# =============================================================================
+# PQC relay front-end -- terminates ML-KEM SSH, captures creds, relays to Cowrie
+# =============================================================================
+# Debian 13 "trixie" ships OpenSSH >= 9.9 (mlkem768x25519-sha256 hybrid kex)
+# AND glibc NSS -- so we can use libnss-ato to accept ANY username, the classic
+# SSH-honeypot trick that musl/Alpine cannot do. PAM (pam_exec + expose_authtok)
+# captures the attempted password. sshpass drives the non-interactive hop into
+# Cowrie.
+#
+# Build context is the PARENT dir (pqc-poc/) so we reuse the same entrypoint.sh
+# as the base variants -- it emits honeypot_start + kex_negotiated identically.
+# STATUS: authored, NOT built here (no Docker on dev machine).
+# =============================================================================
+FROM debian:trixie-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        openssh-server openssh-client sshpass libpam-modules \
+        ca-certificates git build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# --- libnss-ato: resolve any unknown username to one local account -----------
+RUN git clone --depth 1 https://github.com/donapieppo/libnss-ato /tmp/libnss-ato \
+    && make -C /tmp/libnss-ato \
+    && cp /tmp/libnss-ato/libnss_ato.so.2 /lib/$(uname -m)-linux-gnu/ \
+    && ldconfig \
+    && rm -rf /tmp/libnss-ato \
+    && useradd -m -s /usr/sbin/nologin sensor \
+    && echo "sensor" > /etc/libnss-ato.conf \
+    && sed -i 's/^passwd:.*/passwd:         files ato/' /etc/nsswitch.conf \
+    && sed -i 's/^group:.*/group:          files ato/'  /etc/nsswitch.conf
+
+# entrypoint.sh comes from the parent (pqc-poc/) context; the rest from handoff/
+COPY entrypoint.sh                    /usr/local/bin/entrypoint.sh
+COPY handoff/relay/sshd_config.relay  /etc/ssh/sshd_config.relay
+COPY handoff/relay/pam_sshd           /etc/pam.d/sshd
+COPY handoff/relay/capture-creds.sh   /usr/local/bin/capture-creds.sh
+COPY handoff/relay/relay.sh           /usr/local/bin/relay.sh
+RUN chmod 0755 /usr/local/bin/entrypoint.sh /usr/local/bin/relay.sh \
+               /usr/local/bin/capture-creds.sh \
+    && mkdir -p /etc/ssh/keys /var/log/pqc-honeypot /run/sshd
+
+ENV VARIANT=relay
+EXPOSE 2225
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

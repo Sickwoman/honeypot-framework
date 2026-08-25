@@ -1,0 +1,55 @@
+# =============================================================================
+# PQC-ONLY SSH honeypot -- sshd configuration  (requires OQS-OpenSSH)
+# =============================================================================
+# Offers ONLY pure post-quantum key exchange -- NO classical hybrid, NO
+# classical fallback. Mainline OpenSSH deliberately does not ship pure-PQC kex
+# (it always combines ML-KEM with a classical curve), so this variant MUST run
+# on an OQS-OpenSSH build. See Dockerfile.pqc-only.
+#
+# RESEARCH PURPOSE: measure "hard" post-quantum failures -- clients with no PQC
+# support cannot complete key exchange at all, which is the signal we want.
+#
+# KEX NAMES (verified against the open-quantum-safe/openssh repo, fork of
+# OpenSSH 10.2). The PURE (non-hybrid) methods are:
+#     mlkem768-sha256      ML-KEM-768 (FIPS 203)         -- current name
+#     kyber-768-sha384     CRYSTALS-Kyber-768            -- legacy name
+# NOTE: pure methods have NO "@openquantumsafe.org" suffix -- that suffix is
+# used only by the HYBRID methods (e.g. x25519-ml-kem-512-sha256@openquantumsafe.org).
+#
+# !!! sshd REFUSES TO START if a KexAlgorithms entry is unknown to the build.
+#     The Docker image (openquantumsafe/openssh:latest) is ~12 months old and
+#     may predate the kyber->mlkem rename, so it may support only ONE of the two
+#     names below. Run `ssh -Q kex` INSIDE the image and keep only what it lists.
+# =============================================================================
+
+Port 2224
+AddressFamily inet
+ListenAddress 0.0.0.0
+
+# Pure PQC key exchange only -- NO classical algorithms. Keep only image-supported names.
+KexAlgorithms mlkem768-sha256,kyber-768-sha384
+
+HostKey /etc/ssh/keys/ssh_host_ed25519_key
+HostKeyAlgorithms ssh-ed25519
+Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com
+MACs    hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com
+
+PermitRootLogin            no
+PasswordAuthentication     yes
+PermitEmptyPasswords       no
+PubkeyAuthentication       no
+KbdInteractiveAuthentication no
+MaxAuthTries               3
+MaxSessions                2
+LoginGraceTime             20
+AllowTcpForwarding         no
+AllowAgentForwarding       no
+X11Forwarding              no
+PermitTunnel               no
+PermitTTY                  no
+PermitUserRC               no
+Subsystem sftp             /bin/false
+
+LogLevel       DEBUG1
+SyslogFacility AUTH
+StrictModes    yes
