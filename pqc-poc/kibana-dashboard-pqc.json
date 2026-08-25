@@ -1,0 +1,213 @@
+{
+  "version": "8.15.3",
+  "_comment": "PQC vs Classical Kibana dashboard for the pqc-poc SSH honeypot. Mirrors the nested, documented saved-object style of config/kibana-dashboard.json (visualizations defined inline for readability). All vizzes read the honeypot-* index and the kex_negotiated / cred_attempt events produced by logstash-pqc.conf. See README.md (step 3) for how to load it into a live Kibana.",
+  "objects": [
+    {
+      "type": "index-pattern",
+      "id": "honeypot-star",
+      "attributes": {
+        "title": "honeypot-*",
+        "timeFieldName": "@timestamp"
+      }
+    },
+    {
+      "type": "visualization",
+      "id": "pqc-total-kex",
+      "attributes": {
+        "title": "PQC — Total Key Exchanges",
+        "visState": {
+          "title": "Total Key Exchanges",
+          "type": "metric",
+          "params": { "metric": { "style": {}, "labels": { "show": true } } },
+          "aggs": [
+            { "id": "1", "enabled": true, "type": "count", "schema": "metric", "params": {} }
+          ]
+        },
+        "uiStateJSON": "{}",
+        "kibanaSavedObjectMeta": {
+          "searchSourceJSON": {
+            "index": "honeypot-*",
+            "query": { "query_string": { "query": "honeypot_type: pqc_ssh AND event_type: key_exchange" } },
+            "filter": []
+          }
+        }
+      }
+    },
+    {
+      "type": "visualization",
+      "id": "pqc-vs-classical-split",
+      "attributes": {
+        "title": "PQC vs Classical — Negotiated Key Exchanges",
+        "description": "Headline research signal: fraction of attacker connections that negotiated a post-quantum kex (post_quantum=true) vs classical (false).",
+        "visState": {
+          "title": "PQC vs Classical",
+          "type": "pie",
+          "params": { "type": "pie", "addTooltip": true, "addLegend": true, "isDonut": true },
+          "aggs": [
+            { "id": "1", "enabled": true, "type": "count", "schema": "metric", "params": {} },
+            {
+              "id": "2", "enabled": true, "type": "terms", "schema": "segment",
+              "params": { "field": "post_quantum", "size": 2, "order": "desc", "orderBy": "1" }
+            }
+          ]
+        },
+        "uiStateJSON": "{}",
+        "kibanaSavedObjectMeta": {
+          "searchSourceJSON": {
+            "index": "honeypot-*",
+            "query": { "query_string": { "query": "honeypot_type: pqc_ssh AND event_type: key_exchange" } },
+            "filter": []
+          }
+        }
+      }
+    },
+    {
+      "type": "visualization",
+      "id": "pqc-kex-algorithms",
+      "attributes": {
+        "title": "PQC — Negotiated Algorithms",
+        "description": "Which exact key-exchange algorithm each client landed on (mlkem768x25519-sha256, sntrup761..., curve25519-sha256, ...).",
+        "visState": {
+          "title": "Negotiated Algorithms",
+          "type": "table",
+          "params": { "perPage": 15, "showPartialRows": false, "showMetricsAtAllLevels": false },
+          "aggs": [
+            { "id": "1", "enabled": true, "type": "count", "schema": "metric", "params": {} },
+            {
+              "id": "2", "enabled": true, "type": "terms", "schema": "bucket",
+              "params": { "field": "kex_algorithm.keyword", "size": 20, "order": "desc", "orderBy": "1" }
+            }
+          ]
+        },
+        "uiStateJSON": "{}",
+        "kibanaSavedObjectMeta": {
+          "searchSourceJSON": {
+            "index": "honeypot-*",
+            "query": { "query_string": { "query": "honeypot_type: pqc_ssh AND event_type: key_exchange" } },
+            "filter": []
+          }
+        }
+      }
+    },
+    {
+      "type": "visualization",
+      "id": "pqc-by-variant",
+      "attributes": {
+        "title": "PQC — Key Exchanges by Variant",
+        "description": "Traffic per honeypot variant (classical / hybrid / pqc-only / relay).",
+        "visState": {
+          "title": "Key Exchanges by Variant",
+          "type": "histogram",
+          "params": { "type": "histogram", "addLegend": true },
+          "aggs": [
+            { "id": "1", "enabled": true, "type": "count", "schema": "metric", "params": {} },
+            {
+              "id": "2", "enabled": true, "type": "terms", "schema": "segment",
+              "params": { "field": "variant.keyword", "size": 5, "order": "desc", "orderBy": "1" }
+            },
+            {
+              "id": "3", "enabled": true, "type": "terms", "schema": "group",
+              "params": { "field": "post_quantum", "size": 2, "order": "desc", "orderBy": "1" }
+            }
+          ]
+        },
+        "uiStateJSON": "{}",
+        "kibanaSavedObjectMeta": {
+          "searchSourceJSON": {
+            "index": "honeypot-*",
+            "query": { "query_string": { "query": "honeypot_type: pqc_ssh AND event_type: key_exchange" } },
+            "filter": []
+          }
+        }
+      }
+    },
+    {
+      "type": "visualization",
+      "id": "pqc-adoption-timeline",
+      "attributes": {
+        "title": "PQC — Adoption Over Time",
+        "description": "post_quantum true/false split over time — are PQC-capable attacker tools trending up?",
+        "visState": {
+          "title": "PQC Adoption Over Time",
+          "type": "line",
+          "params": { "type": "line", "addLegend": true, "addTimeMarker": false },
+          "aggs": [
+            { "id": "1", "enabled": true, "type": "count", "schema": "metric", "params": {} },
+            {
+              "id": "2", "enabled": true, "type": "date_histogram", "schema": "segment",
+              "params": { "field": "@timestamp", "interval": "auto", "min_doc_count": 1 }
+            },
+            {
+              "id": "3", "enabled": true, "type": "terms", "schema": "group",
+              "params": { "field": "post_quantum", "size": 2, "order": "desc", "orderBy": "1" }
+            }
+          ]
+        },
+        "uiStateJSON": "{}",
+        "kibanaSavedObjectMeta": {
+          "searchSourceJSON": {
+            "index": "honeypot-*",
+            "query": { "query_string": { "query": "honeypot_type: pqc_ssh AND event_type: key_exchange" } },
+            "filter": []
+          }
+        }
+      }
+    },
+    {
+      "type": "visualization",
+      "id": "pqc-relay-credentials",
+      "attributes": {
+        "title": "PQC Relay — Captured Usernames",
+        "description": "Usernames offered to the PQC front-end (hand-off cred_attempt events). Passwords are visible in Discover; not aggregated here.",
+        "visState": {
+          "title": "Captured Usernames (PQC relay)",
+          "type": "table",
+          "params": { "perPage": 20, "showPartialRows": false, "showMetricsAtAllLevels": false },
+          "aggs": [
+            { "id": "1", "enabled": true, "type": "count", "schema": "metric", "params": {} },
+            {
+              "id": "2", "enabled": true, "type": "terms", "schema": "bucket",
+              "params": { "field": "username.keyword", "size": 25, "order": "desc", "orderBy": "1" }
+            }
+          ]
+        },
+        "uiStateJSON": "{}",
+        "kibanaSavedObjectMeta": {
+          "searchSourceJSON": {
+            "index": "honeypot-*",
+            "query": { "query_string": { "query": "honeypot_type: pqc_ssh AND event_type: login_attempt" } },
+            "filter": []
+          }
+        }
+      }
+    },
+    {
+      "type": "dashboard",
+      "id": "pqc-vs-classical-dashboard",
+      "attributes": {
+        "title": "🔐 PQC vs Classical — SSH Key Exchange",
+        "description": "Post-quantum research view for the pqc-poc SSH honeypot: how many attacker connections negotiate ML-KEM hybrid kex vs classical, which algorithms, per variant, over time, plus credentials captured at the PQC relay front-end.",
+        "panels": [
+          { "panelIndex": "1", "gridData": { "x": 0,  "y": 0,  "w": 12, "h": 8,  "i": "1" }, "type": "visualization", "panelRefName": "panel_1" },
+          { "panelIndex": "2", "gridData": { "x": 12, "y": 0,  "w": 18, "h": 16, "i": "2" }, "type": "visualization", "panelRefName": "panel_2" },
+          { "panelIndex": "3", "gridData": { "x": 30, "y": 0,  "w": 18, "h": 16, "i": "3" }, "type": "visualization", "panelRefName": "panel_3" },
+          { "panelIndex": "4", "gridData": { "x": 0,  "y": 8,  "w": 12, "h": 8,  "i": "4" }, "type": "visualization", "panelRefName": "panel_4" },
+          { "panelIndex": "5", "gridData": { "x": 0,  "y": 16, "w": 24, "h": 14, "i": "5" }, "type": "visualization", "panelRefName": "panel_5" },
+          { "panelIndex": "6", "gridData": { "x": 24, "y": 16, "w": 24, "h": 14, "i": "6" }, "type": "visualization", "panelRefName": "panel_6" }
+        ],
+        "timeRestore": true,
+        "timeFrom": "now-7d",
+        "timeTo": "now",
+        "refreshInterval": { "pause": false, "value": 60000 }
+      },
+      "references": [
+        { "name": "panel_1", "type": "visualization", "id": "pqc-total-kex" },
+        { "name": "panel_2", "type": "visualization", "id": "pqc-vs-classical-split" },
+        { "name": "panel_3", "type": "visualization", "id": "pqc-kex-algorithms" },
+        { "name": "panel_4", "type": "visualization", "id": "pqc-by-variant" },
+        { "name": "panel_5", "type": "visualization", "id": "pqc-adoption-timeline" },
+        { "name": "panel_6", "type": "visualization", "id": "pqc-relay-credentials" }
+      ]
+    }
+  ]
+}
