@@ -29,6 +29,7 @@ and is dropped from the SSH path.
 | `entrypoint.sh` | picks config by `VARIANT`, runs sshd, emits `kex_negotiated` JSON |
 | `docker-compose.yml` | runs classical + hybrid side-by-side; shared log volume; opt-in pqc-only & logstash |
 | `logstash-pqc.conf` | pipeline into the framework's `honeypot-*` Elasticsearch index |
+| `kibana-dashboard-pqc.json` | Kibana saved-object: PQC-vs-classical dashboard (6 panels) |
 | `local-verify.sh` | **no Docker** — offline crypto-primitive proof (runs today) |
 | `verify.sh` | **Docker** — end-to-end handshake proof for every variant |
 | `COWRIE-HANDOFF.md` | decision: how the PQC front-end feeds Cowrie for post-auth capture |
@@ -74,7 +75,31 @@ attacker tools already speak post-quantum SSH, and which fall back to classical.
 (file+json input, `honeypot_type`/`service`/`event_type` fields, the shared
 `honeypot-%{+YYYY.MM.dd}` index). Mount the `pqc-logs` volume into a Logstash
 container at `/var/log/pqc-honeypot` — the commented `logstash` service in
-`docker-compose.yml` shows the wiring.
+`docker-compose.yml` shows the wiring. It maps every event onto the framework's
+`event_type` vocabulary: `kex_negotiated`→`key_exchange`, `cred_attempt`→
+`login_attempt`, `handoff`→`session_handoff`.
+
+`kibana-dashboard-pqc.json` is the **PQC-vs-classical dashboard** (mirrors the
+nested saved-object style of the repo's `config/kibana-dashboard.json`; reads
+the same `honeypot-*` index). Six panels:
+
+1. **Total Key Exchanges** — metric
+2. **PQC vs Classical** — donut on `post_quantum` (the headline signal)
+3. **Negotiated Algorithms** — table on `kex_algorithm.keyword`
+4. **Key Exchanges by Variant** — bar on `variant.keyword`, split by `post_quantum`
+5. **PQC Adoption Over Time** — line, `post_quantum` split over `@timestamp`
+6. **Captured Usernames (PQC relay)** — table on `username.keyword` (hand-off `cred_attempt`s)
+
+Load it once Elasticsearch/Kibana are up (Kibana ≥ 8, `honeypot-*` receiving data):
+
+```bash
+curl -s -u elastic:$ELASTIC_PW -X POST "$KIBANA/api/saved_objects/_import?overwrite=true" \
+  -H "kbn-xsrf: true" --form file=@kibana-dashboard-pqc.json
+```
+
+or **Stack Management → Saved Objects → Import**. (The file uses the repo's
+readable nested style; if your Kibana rejects inline `visState`, recreate the
+data view `honeypot-*` and import — Kibana migrates legacy visualizations.)
 
 ## Post-auth capture (step 5)
 
@@ -90,8 +115,12 @@ stays the deception backend rather than the transport.
 2. On a Docker host, build `Dockerfile.pqc-only`, run `ssh -Q kex` in the image
    to confirm which of the verified pure names it supports, trim
    `sshd_config.pqc-only` to match, then enable the opt-in service.
-3. Stand up a Logstash container against `pqc-logs` and add a Kibana
-   PQC-vs-classical split (per the `dataviz` conventions).
+3. ~~Add a Kibana PQC-vs-classical split~~ — **authored**: `logstash-pqc.conf`
+   (maps `kex_negotiated`/`cred_attempt`/`handoff` onto the framework's
+   `event_type` vocab) + `kibana-dashboard-pqc.json` (6-panel dashboard on the
+   `honeypot-*` index). Stand up a Logstash container against `pqc-logs` and
+   import the dashboard (see [ELK integration](#elk-integration-step-3)) to
+   validate end-to-end.
 4. ~~Prototype the Cowrie hand-off~~ — **authored** in [`handoff/`](handoff/)
    (two-service compose: PQC relay → Cowrie, Option B). Run `handoff/verify-handoff.sh`
    on a Docker host to validate end-to-end.
