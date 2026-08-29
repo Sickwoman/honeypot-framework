@@ -1,0 +1,195 @@
+# Honeypot Framework - Python Dependencies
+# Install with: pip install -r requirements.txt
+
+################################################################################
+# WEB FRAMEWORK & API
+################################################################################
+
+# Flask web framework
+Flask==2.3.3
+Flask-CORS==4.0.0
+Flask-RESTful==0.3.10
+Werkzeug==2.3.7
+
+# Production WSGI server
+gunicorn==21.2.0
+gevent==23.9.1
+gevent-websocket==0.10.1
+
+################################################################################
+# AUTHENTICATION & SECURITY
+################################################################################
+
+# JWT Token Authentication
+PyJWT==2.8.1
+
+# Password hashing
+bcrypt==4.0.1
+cryptography==41.0.3
+
+# SSL/TLS
+pyOpenSSL==23.2.0
+
+# Security headers
+python-dotenv==1.0.0
+
+################################################################################
+# DATABASE & ORM
+################################################################################
+
+# SQLite (built-in, but listed for reference)
+# Database migration tool
+Alembic==1.12.1
+SQLAlchemy==2.0.23
+
+# PostgreSQL (optional, for larger deployments)
+psycopg2-binary==2.9.7
+
+# Database connection pooling
+sqlalchemy-utils==0.41.1
+
+################################################################################
+# LOG AGGREGATION & MONITORING
+################################################################################
+
+# Elasticsearch client
+elasticsearch==8.10.0
+
+# Prometheus metrics
+prometheus-client==0.18.0
+
+# Logging to structured formats
+python-json-logger==2.0.7
+
+################################################################################
+# DATA PROCESSING & ANALYSIS
+################################################################################
+
+# Data manipulation
+pandas==2.1.3
+numpy==1.24.3
+
+# Scientific computing
+scipy==1.11.4
+
+# Machine Learning
+scikit-learn==1.3.2
+joblib==1.3.2
+
+# Statistical analysis
+statsmodels==0.14.0
+
+################################################################################
+# API CLIENTS & INTEGRATIONS
+################################################################################
+
+# HTTP requests
+requests==2.31.0
+urllib3==2.0.7
+
+# JSON Web Token
+PyJWT==2.8.1
+
+# Threat Intelligence APIs
+# (Custom implementations or additional packages as needed)
+
+################################################################################
+# UTILITIES & HELPERS
+################################################################################
+
+# Configuration management
+python-dotenv==1.0.0
+pyyaml==6.0.1
+
+# Date/time handling
+python-dateutil==2.8.2
+pytz==2023.3
+
+# Validation
+marshmallow==3.20.1
+jsonschema==4.19.2
+
+# CLI utilities
+click==8.1.7
+colorama==0.4.6
+tabulate==0.9.0
+
+# UUID/hash utilities
+uuid6==1.0.3
+
+################################################################################
+# TESTING & DEVELOPMENT
+################################################################################
+
+# Unit testing
+pytest==7.4.3
+pytest-cov==4.1.0
+pytest-flask==1.3.0
+
+# Mocking
+responses==0.24.1
+mock==5.1.0
+
+# Code quality
+black==23.11.0
+flake8==6.1.0
+pylint==3.0.3
+isort==5.12.0
+
+# Type checking
+mypy==1.7.1
+types-requests==2.31.0.10
+
+################################################################################
+# OPTIONAL DEPENDENCIES
+################################################################################
+
+# For async support
+aiohttp==3.9.1
+asyncio-contextmanager==1.0.0
+
+# For CSV/Excel export
+openpyxl==3.10.10
+xlsxwriter==3.1.8
+
+# For PDF report generation
+reportlab==4.0.7
+pypdf==3.17.1
+
+# For email notifications
+secure-smtplib==0.1.1
+
+# For Slack/Discord integrations
+slack-sdk==3.26.1
+discord-webhook==1.3.0
+
+# For AWS integration
+boto3==1.29.7
+botocore==1.32.7
+
+################################################################################
+# VERSION NOTES
+################################################################################
+
+# Last Updated: 2026-08-29
+# Python: 3.8+
+# 
+# Installation:
+#   pip install -r requirements.txt
+#
+# Development Installation (with testing tools):
+#   pip install -r requirements.txt
+#   pip install pytest pytest-cov black flake8
+#
+# Production Installation (minimal dependencies):
+#   pip install -r requirements-prod.txt
+#
+# Upgrade all packages:
+#   pip install --upgrade -r requirements.txt
+#
+# Generate requirements from current environment:
+#   pip freeze > requirements.txt
+#
+# Check for security vulnerabilities:
+#   pip install safety
+#   safety check
