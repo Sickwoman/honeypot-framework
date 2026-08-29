@@ -1,35 +1,224 @@
-# Kibana Security Configuration
+# Kibana Security Configuration for Honeypot Framework
+# HTTPS, authentication, and access control
+
+################################################################################
+# SERVER SECURITY
+################################################################################
+
+# Enable HTTPS
+server.ssl.enabled: true
+
+# Certificate configuration (PEM format)
+server.ssl.certificate: "/etc/honeypot-framework/ssl/kibana-cert.pem"
+server.ssl.key: "/etc/honeypot-framework/ssl/kibana-key.pem"
+
+# Kibana server port (HTTPS)
+server.port: 5601
+server.host: "0.0.0.0"
+
+# TLS version control
+server.ssl.supportedProtocols: ["TLSv1.2", "TLSv1.3"]
+server.ssl.cipherSuites: [
+  "TLS_AES_256_GCM_SHA384",
+  "TLS_CHACHA20_POLY1305_SHA256",
+  "TLS_AES_128_GCM_SHA256",
+  "ECDHE-RSA-AES256-GCM-SHA384",
+  "ECDHE-RSA-AES128-GCM-SHA256"
+]
+
+################################################################################
+# ELASTICSEARCH CONNECTIVITY (SECURE)
+################################################################################
+
+# Elasticsearch server URL (HTTPS)
+elasticsearch.hosts: ["https://localhost:9200"]
+
+# Use kibana_system user (recommended over elastic)
+elasticsearch.username: "kibana_system"
+elasticsearch.password: "changeme"
+
+# Certificate verification for Elasticsearch
+elasticsearch.ssl.verificationMode: certificate
+elasticsearch.ssl.certificateAuthorities: ["/etc/honeypot-framework/ssl/ca-cert.pem"]
+
+# Request headers whitelist
+elasticsearch.requestHeadersWhitelist: ["authorization", "x-elastic-product"]
+
+################################################################################
+# AUTHENTICATION & SESSIONS
+################################################################################
 
 # Enable X-Pack security
 xpack.security.enabled: true
 
-# Elasticsearch connection with credentials
-elasticsearch.hosts: ["https://elasticsearch:9200"]
-elasticsearch.username: "elastic"
-elasticsearch.password: "changeme"
-elasticsearch.ssl.verificationMode: "certificate"
-elasticsearch.ssl.certificateAuthorities: ["/usr/share/kibana/config/certs/ca.crt"]
+# Session timeout (15 minutes idle, 24 hours total)
+xpack.security.session.idleTimeout: "15m"
+xpack.security.session.lifespan: "24h"
 
-# Kibana server security
-server.ssl.enabled: true
-server.ssl.certificate: "/usr/share/kibana/config/certs/kibana.crt"
-server.ssl.key: "/usr/share/kibana/config/certs/kibana.key"
+# Cookie security
+session.secureCookie: true
+session.httpOnlyCookie: true
+session.sameSiteCookie: Strict
 
-# Session timeout (5 hours)
-xpack.security.session.idleTimeout: "18000s"
-xpack.security.session.lifespan: "43200s"
+# CSRF protection
+xpack.security.csrf.cookieName: "XSRF-TOKEN"
 
-# Authentication provider
+################################################################################
+# AUTHENTICATION PROVIDERS
+################################################################################
+
+# Basic authentication (username/password)
 xpack.security.authc.providers:
   basic.basic1:
     order: 0
     enabled: true
+  
+  # Optional: Enable SAML for enterprise SSO
+  # saml.saml1:
+  #   order: 1
+  #   realm: saml1
 
-# API key settings
+# Default provider
+xpack.security.authc.selector.enabled: false
+
+################################################################################
+# RBAC - ROLE-BASED ACCESS CONTROL
+################################################################################
+
+# Enable role-based access control
+xpack.security.rbac.enabled: true
+
+# Spaces for multi-tenancy
+xpack.spaces.enabled: true
+
+# Suggested roles to create:
+# - analyst: Read-only dashboards
+# - responder: Can modify incidents
+# - admin: Full access
+# - observer: Visualization-only
+
+################################################################################
+# API KEY SECURITY
+################################################################################
+
+# Enable API keys for programmatic access
 xpack.security.apiKeyService.enabled: true
 
-# Enable audit logging
+# API key expiration and rotation
+xpack.security.authc.api_key.cache.ttl: "24h"
+xpack.security.authc.api_key.cache.max_tokens: 100000
+
+################################################################################
+# SECURITY FEATURES
+################################################################################
+
+# Disable console editing in production
+xpack.dev_tools.console.enabled: false
+xpack.dev_tools.sbom.enabled: false
+
+# Request logging
+logging.appenders:
+  file:
+    type: rolling-file
+    fileName: /var/log/kibana/kibana.log
+    policy:
+      type: size-limit
+      size: 100mb
+    layout:
+      type: pattern
+      pattern: "[%date{ISO8601}][%level][%logger] %message"
+  securityFile:
+    type: rolling-file
+    fileName: /var/log/kibana/security.log
+    policy:
+      type: size-limit
+      size: 100mb
+
+# Audit logging
 xpack.security.audit.enabled: true
-xpack.security.audit.appender.file.type: file
-xpack.security.audit.appender.file.fileName: "/var/log/kibana/audit.log"
+xpack.security.audit.appender:
+  type: rolling-file
+  fileName: "/var/log/kibana/audit.log"
+  policy:
+    type: size-limit
+    size: 100mb
+  layout:
+    type: json
+
+# Redact sensitive information
+logging.redaction.enabled: true
+
+################################################################################
+# CACHING
+################################################################################
+
+# Prevent browser caching of sensitive data
+cacheControl.browserCache: false
+
+# Remove session data on logout
+session.storage:
+  type: browser
+
+################################################################################
+# LOGGING & MONITORING
+################################################################################
+
+# Debug logging for security
+logging.level:
+  security: debug
+  elasticsearch.client: debug
+  kibana.security: debug
+
+################################################################################
+# BUILT-IN USERS
+################################################################################
+
+# Default Kibana system user
+# Username: kibana_system
+# Password: changeme  <-- MUST BE CHANGED!
+#
+# To change password:
+# curl -X POST "https://localhost:9200/_security/user/kibana_system/_password?pretty" \
+#   -u elastic:changeme \
+#   -H 'Content-Type: application/json' \
+#   -d'{
+#     "password" : "new_strong_password_here"
+#   }'
+
+################################################################################
+# PRODUCTION CHECKLIST
+################################################################################
+
+# 1. CHANGE DEFAULT PASSWORDS
+#    - kibana_system user password
+#    - Create admin user with strong password
+#
+# 2. ROTATE CERTIFICATES
+#    - Use Let's Encrypt for production
+#    - Set calendar reminder for expiration
+#
+# 3. CREATE CUSTOM ROLES
+#    - analyst: Read-only
+#    - responder: Modification rights
+#    - admin: Full access
+#    - observer: Dashboards only
+#
+# 4. ENABLE AUDIT LOGGING
+#    - Monitor login attempts
+#    - Alert on security events
+#    - Archive logs for compliance
+#
+# 5. RESTRICT ACCESS
+#    - Firewall rules for port 5601
+#    - IP allowlisting
+#    - VPN for remote access
+#
+# 6. CONFIGURE LDAP/SAML (Optional)
+#    - Enterprise single sign-on
+#    - Centralized user management
+#
+# 7. MONITOR PERFORMANCE
+#    - Watch resource usage
+#    - Monitor Elasticsearch connectivity
+#    - Set up availability alerts
 
