@@ -9,9 +9,9 @@
 -- - Alert acknowledgment workflow
 -- - Performance indices for large datasets
 
-################################################################################
+-- ################################################################################
 -- ALERTS TABLE
-################################################################################
+-- ################################################################################
 
 CREATE TABLE IF NOT EXISTS alerts (
     id TEXT PRIMARY KEY,                          -- Unique alert identifier (UUID)
@@ -72,9 +72,9 @@ CREATE INDEX IF NOT EXISTS idx_alerts_first_seen ON alerts(first_seen);
 CREATE INDEX IF NOT EXISTS idx_alerts_timestamp ON alerts(first_seen DESC);
 CREATE INDEX IF NOT EXISTS idx_alerts_threat_level ON alerts(threat_level);
 
-################################################################################
+-- ################################################################################
 -- ALERT HISTORY TABLE (Audit Trail)
-################################################################################
+-- ################################################################################
 
 CREATE TABLE IF NOT EXISTS alert_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -103,9 +103,9 @@ CREATE INDEX IF NOT EXISTS idx_history_alert_id ON alert_history(alert_id);
 CREATE INDEX IF NOT EXISTS idx_history_changed_by ON alert_history(changed_by);
 CREATE INDEX IF NOT EXISTS idx_history_timestamp ON alert_history(created_at DESC);
 
-################################################################################
+-- ################################################################################
 -- INCIDENTS TABLE
-################################################################################
+-- ################################################################################
 
 CREATE TABLE IF NOT EXISTS incidents (
     id TEXT PRIMARY KEY,                         -- Unique incident identifier (UUID)
@@ -151,9 +151,9 @@ CREATE INDEX IF NOT EXISTS idx_incidents_status ON incidents(status);
 CREATE INDEX IF NOT EXISTS idx_incidents_assigned_to ON incidents(assigned_to);
 CREATE INDEX IF NOT EXISTS idx_incidents_created_at ON incidents(created_at DESC);
 
-################################################################################
+-- ################################################################################
 -- INCIDENT HISTORY TABLE (Timeline)
-################################################################################
+-- ################################################################################
 
 CREATE TABLE IF NOT EXISTS incident_timeline (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -179,9 +179,9 @@ CREATE TABLE IF NOT EXISTS incident_timeline (
 CREATE INDEX IF NOT EXISTS idx_timeline_incident_id ON incident_timeline(incident_id);
 CREATE INDEX IF NOT EXISTS idx_timeline_timestamp ON incident_timeline(created_at DESC);
 
-################################################################################
+-- ################################################################################
 -- ALERT RULES TABLE
-################################################################################
+-- ################################################################################
 
 CREATE TABLE IF NOT EXISTS alert_rules (
     id TEXT PRIMARY KEY,
@@ -216,9 +216,9 @@ CREATE TABLE IF NOT EXISTS alert_rules (
 CREATE INDEX IF NOT EXISTS idx_rules_enabled ON alert_rules(enabled);
 CREATE INDEX IF NOT EXISTS idx_rules_severity ON alert_rules(severity);
 
-################################################################################
+-- ################################################################################
 -- SUPPRESSION RULES TABLE
-################################################################################
+-- ################################################################################
 
 CREATE TABLE IF NOT EXISTS suppression_rules (
     id TEXT PRIMARY KEY,
@@ -247,9 +247,9 @@ CREATE TABLE IF NOT EXISTS suppression_rules (
 -- Index
 CREATE INDEX IF NOT EXISTS idx_suppression_active ON suppression_rules(active_from, active_until);
 
-################################################################################
+-- ################################################################################
 -- USERS & ROLES TABLE
-################################################################################
+-- ################################################################################
 
 CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
@@ -281,9 +281,9 @@ CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
 
-################################################################################
+-- ################################################################################
 -- AUDIT LOG TABLE
-################################################################################
+-- ################################################################################
 
 CREATE TABLE IF NOT EXISTS audit_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -313,9 +313,9 @@ CREATE INDEX IF NOT EXISTS idx_audit_resource ON audit_log(resource_type, resour
 CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_log(action);
 
-################################################################################
+-- ################################################################################
 -- METRICS TABLE
-################################################################################
+-- ################################################################################
 
 CREATE TABLE IF NOT EXISTS metrics (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -340,9 +340,9 @@ CREATE TABLE IF NOT EXISTS metrics (
 CREATE INDEX IF NOT EXISTS idx_metrics_name ON metrics(metric_name);
 CREATE INDEX IF NOT EXISTS idx_metrics_timestamp ON metrics(recorded_at DESC);
 
-################################################################################
+-- ################################################################################
 -- VIEWS FOR COMMON QUERIES
-################################################################################
+-- ################################################################################
 
 -- View: Recent active alerts
 CREATE VIEW IF NOT EXISTS recent_active_alerts AS
@@ -399,9 +399,9 @@ FROM incidents
 WHERE closed_at IS NULL
 GROUP BY status;
 
-################################################################################
+-- ################################################################################
 -- TRIGGERS (Automatic Updates)
-################################################################################
+-- ################################################################################
 
 -- Update alert timestamp on modification
 CREATE TRIGGER IF NOT EXISTS update_alert_timestamp
@@ -419,9 +419,9 @@ BEGIN
     UPDATE incidents SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
 END;
 
-################################################################################
+-- ################################################################################
 -- INITIALIZATION DATA
-################################################################################
+-- ################################################################################
 
 -- Insert default alert rules (examples)
 INSERT OR IGNORE INTO alert_rules (id, name, severity, condition, enabled, created_at) VALUES
@@ -430,9 +430,9 @@ INSERT OR IGNORE INTO alert_rules (id, name, severity, condition, enabled, creat
 ('rule_003', 'BruteForceAttempt', 'HIGH', '{"failed_logins": ">5"}', 1, CURRENT_TIMESTAMP),
 ('rule_004', 'SuspiciousCommand', 'MEDIUM', '{"command_pattern": "malware"}', 1, CURRENT_TIMESTAMP);
 
-################################################################################
+-- ################################################################################
 -- MAINTENANCE
-################################################################################
+-- ################################################################################
 
 -- Auto-archive old alerts (older than 90 days)
 -- Run via cron: sqlite3 alerts.db < maintenance.sql
@@ -441,6 +441,6 @@ INSERT OR IGNORE INTO alert_rules (id, name, severity, condition, enabled, creat
 -- PRAGMA journal_mode = WAL;  -- Write-ahead logging for better concurrency
 -- PRAGMA synchronous = NORMAL; -- Balance safety and performance
 
-################################################################################
+-- ################################################################################
 -- END OF SCHEMA
-################################################################################
+-- ################################################################################

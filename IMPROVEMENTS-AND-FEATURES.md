@@ -20,7 +20,7 @@
 ### ⚠️ Critical Gaps (High Priority)
 1. **Security Hardening** — SSL/TLS not implemented end-to-end
 2. **API Security** — No authentication for Python/API endpoints
-3. **RBAC** — No role-based access control (single credential model)
+3. **RBAC** — ✅ role-based access control implemented (see §5 / `docs/RBAC-POLICY.md`)
 4. **Data Encryption** — Logs stored unencrypted in local/S3
 5. **Alert Storage** — No persistent database for historical alerts
 6. **Frontend UI** — Only CLI dashboards, no web-based alert management
@@ -188,9 +188,14 @@ CREATE INDEX idx_alerts_severity ON alerts(severity);
 
 ## 🎯 MEDIUM-TERM IMPROVEMENTS (Month 1-2)
 
-### 5. Implement Role-Based Access Control (RBAC)
+### 5. Implement Role-Based Access Control (RBAC)  ✅ IMPLEMENTED
 **Priority**: HIGH  
 **Effort**: 10-12 hours
+
+> Delivered: fine-grained permission matrix (`api/rbac.py`), `@require_permission`
+> decorator (`api/decorators.py`), DB-backed login + user management
+> (`api/user_manager.py`, `api/auth_routes.py`), policy docs
+> (`docs/RBAC-POLICY.md`), and tests (`tests/test_rbac.py`).
 
 **Current Issue**: Single credential model; no permission granularity
 

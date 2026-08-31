@@ -20,6 +20,11 @@ ALGORITHM = "HS256"
 TOKEN_EXPIRATION_HOURS = int(os.getenv("TOKEN_EXPIRATION_HOURS", 24))
 API_KEY_LENGTH = 32
 
+# JWT issuer/audience claims. generate_token() sets these and validate_token()
+# verifies them, so they must stay in sync (kept here as the single source).
+TOKEN_ISSUER = "honeypot-framework"
+TOKEN_AUDIENCE = "honeypot-api"
+
 class AuthenticationError(Exception):
     """Custom exception for authentication errors"""
     pass
@@ -58,8 +63,8 @@ class JWTManager:
             "roles": roles,
             "iat": now,
             "exp": expiration,
-            "iss": "honeypot-framework",
-            "aud": "honeypot-api"
+            "iss": TOKEN_ISSUER,
+            "aud": TOKEN_AUDIENCE
         }
         
         try:
@@ -83,10 +88,12 @@ class JWTManager:
         """
         try:
             payload = jwt.decode(
-                token, 
-                self.secret_key, 
+                token,
+                self.secret_key,
                 algorithms=[self.algorithm],
-                options={"verify_signature": True}
+                audience=TOKEN_AUDIENCE,
+                issuer=TOKEN_ISSUER,
+                options={"verify_signature": True},
             )
             return payload
         except jwt.ExpiredSignatureError:
@@ -211,10 +218,52 @@ jwt_manager = JWTManager()
 api_key_manager = APIKeyManager()
 
 
+def resolve_request_identity():
+    """
+    Authenticate the current Flask request and populate the request context.
+
+    Resolves either an ``X-API-Key`` header or a bearer JWT in the
+    ``Authorization`` header, and on success sets ``g.user_id``,
+    ``g.username``, ``g.roles`` and ``g.auth_method``.
+
+    Shared by :func:`require_auth` (role checks) and
+    ``api.decorators.require_permission`` (permission checks) so both paths use
+    identical authentication logic.
+
+    Raises:
+        AuthenticationError: If no/invalid credentials are supplied.
+    """
+    # Check for API key
+    api_key = request.headers.get("X-API-Key")
+    if api_key:
+        key_info = api_key_manager.validate_api_key(api_key)
+        g.user_id = key_info["user_id"]
+        g.username = key_info["username"]
+        g.roles = key_info["roles"]
+        g.auth_method = "api_key"
+        return
+
+    # Check for JWT token
+    auth_header = request.headers.get("Authorization")
+    if not auth_header:
+        raise AuthenticationError("Missing authentication")
+
+    try:
+        token = auth_header.split(" ")[1]
+    except IndexError:
+        raise AuthenticationError("Invalid authorization header")
+
+    payload = jwt_manager.validate_token(token)
+    g.user_id = payload["sub"]
+    g.username = payload["username"]
+    g.roles = payload.get("roles", [])
+    g.auth_method = "jwt"
+
+
 def require_auth(required_roles: list = None):
     """
     Flask decorator for endpoint authentication
-    
+
     Args:
         required_roles: List of roles required to access endpoint
     """
@@ -222,45 +271,22 @@ def require_auth(required_roles: list = None):
         @wraps(f)
         def decorated_function(*args, **kwargs):
             try:
-                # Check for API key
-                api_key = request.headers.get("X-API-Key")
-                if api_key:
-                    key_info = api_key_manager.validate_api_key(api_key)
-                    g.user_id = key_info["user_id"]
-                    g.username = key_info["username"]
-                    g.roles = key_info["roles"]
-                    g.auth_method = "api_key"
-                else:
-                    # Check for JWT token
-                    auth_header = request.headers.get("Authorization")
-                    if not auth_header:
-                        return jsonify({"error": "Missing authentication"}), 401
-                    
-                    try:
-                        token = auth_header.split(" ")[1]
-                    except IndexError:
-                        return jsonify({"error": "Invalid authorization header"}), 401
-                    
-                    payload = jwt_manager.validate_token(token)
-                    g.user_id = payload["sub"]
-                    g.username = payload["username"]
-                    g.roles = payload.get("roles", [])
-                    g.auth_method = "jwt"
-                
+                resolve_request_identity()
+
                 # Check required roles
                 if required_roles:
                     user_roles = set(g.roles)
                     required = set(required_roles)
                     if not user_roles & required:
                         return jsonify({"error": "Insufficient permissions"}), 403
-                
+
                 return f(*args, **kwargs)
-            
+
             except AuthenticationError as e:
                 return jsonify({"error": str(e)}), 401
             except Exception as e:
                 return jsonify({"error": "Authentication failed"}), 401
-        
+
         return decorated_function
     return decorator
 
@@ -283,6 +309,12 @@ def analyst_required(f):
 def responder_required(f):
     """Decorator requiring responder role"""
     return require_auth(required_roles=["responder", "admin"])(f)
+
+
+def observer_required(f):
+    """Decorator requiring at least observer role (any authenticated role,
+    since observer is the lowest tier)."""
+    return require_auth(required_roles=["observer", "analyst", "responder", "admin"])(f)
 
 
 # ============================================================================
