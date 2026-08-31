@@ -27,7 +27,7 @@
 
 ### 🟡 Important Gaps (Medium Priority)
 7. **Incident Response** — Playbooks documented but not automated
-8. **Threat Correlation** — No attack pattern linking across honeypots
+8. **Threat Correlation** — ✅ attack pattern linking across honeypots implemented (see §7 / `docs/CORRELATION-ENGINE.md`)
 9. **Compliance** — No HIPAA/PCI-DSS/SOC2 reporting
 10. **Rate Limiting** — No DDoS/brute-force protection
 
@@ -267,9 +267,16 @@ actions:
 
 ---
 
-### 7. Attack Correlation Engine
+### 7. Attack Correlation Engine  ✅ IMPLEMENTED
 **Priority**: MEDIUM  
 **Effort**: 14-16 hours
+
+> Delivered: multi-dimensional correlation engine (`analytics/correlation_engine.py`)
+> covering multi-target actors, coordinated campaigns, attack chains, and shared
+> indicators; graph export (`analytics/attack_graph.py`), tunable rules
+> (`config/correlation_rules.yml`), an RBAC-guarded `GET /api/v1/correlations`
+> endpoint, policy docs (`docs/CORRELATION-ENGINE.md`), and tests
+> (`tests/test_correlation.py`).
 
 **Current Issue**: No linking of related attacks across honeypots/time
 
