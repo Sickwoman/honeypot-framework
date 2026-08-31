@@ -560,6 +560,39 @@ def get_top_ips():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/v1/correlations', methods=['GET'])
+@require_permission(Permission.STATS_READ)
+@rate_limit(max_requests=60)
+@log_request_response
+def get_correlations():
+    """Run the attack correlation engine over stored alerts.
+
+    Query params:
+        lookback: hours to look back (default: engine config; 0 = all)
+        graph:    'true' to also include an attack-graph representation
+    """
+    try:
+        from analytics.correlation_engine import CorrelationEngine
+        lookback = request.args.get('lookback')
+        engine = CorrelationEngine(db_path=alert_service.db_path)
+        alerts = engine.load_alerts(
+            lookback_hours=int(lookback) if lookback is not None else None)
+        campaigns = engine.correlate(alerts)
+
+        payload = {
+            'analyzed_alerts': len(alerts),
+            'campaign_count': len(campaigns),
+            'campaigns': [c.to_dict() for c in campaigns],
+        }
+        if request.args.get('graph', '').lower() == 'true':
+            from analytics.attack_graph import AttackGraph
+            payload['graph'] = AttackGraph.from_campaigns(campaigns).to_dict()
+        return jsonify(payload)
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 ################################################################################
 # HEALTH CHECK
 ################################################################################

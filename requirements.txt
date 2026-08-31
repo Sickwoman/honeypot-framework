@@ -148,6 +148,10 @@ types-requests==2.31.0.10
 aiohttp==3.9.1
 asyncio-contextmanager==1.0.0
 
+# For attack-graph visualization (optional; analytics/attack_graph.py works
+# without it and only uses networkx in the optional to_networkx() helper)
+# networkx==3.2.1
+
 # For CSV/Excel export
 openpyxl==3.10.10
 xlsxwriter==3.1.8

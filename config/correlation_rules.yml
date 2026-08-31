@@ -1,0 +1,59 @@
+################################################################################
+# Honeypot Framework - Attack Correlation Rules
+#
+# Consumed by analytics/correlation_engine.py. Every threshold here can be
+# tuned WITHOUT touching code. If this file (or PyYAML) is unavailable, the
+# engine falls back to these exact same defaults, so it always runs.
+################################################################################
+
+# Only correlate alerts whose last_seen falls within the last N hours.
+# Set to 0 to disable the time filter (correlate the whole table).
+lookback_hours: 168            # 7 days
+
+rules:
+  # 1. One source IP attacking multiple honeypots / services.
+  #    Signals a single actor casting a wide net across the deployment.
+  multi_target_actor:
+    enabled: true
+    min_targets: 2             # distinct honeypot_type (or service_name) values
+    severity: HIGH
+
+  # 2. Coordinated / distributed campaign: many distinct source IPs hitting the
+  #    same service inside a short window (botnet / password-spray shape).
+  coordinated_campaign:
+    enabled: true
+    window_minutes: 10
+    min_sources: 5             # distinct source IPs within the window
+    severity: HIGH
+
+  # 3. Attack chain: a single IP progressing through kill-chain phases over
+  #    time (reconnaissance -> access -> exploitation -> exfiltration).
+  attack_chain:
+    enabled: true
+    max_gap_minutes: 60        # max time gap between consecutive phases
+    min_phases: 2              # distinct phases required to call it a chain
+    severity: CRITICAL
+
+  # 4. Shared indicator of compromise linking otherwise-unrelated alerts
+  #    (same entry in the alert's threat_indicators JSON array).
+  shared_indicator:
+    enabled: true
+    min_alerts: 2              # distinct alerts sharing one indicator
+    severity: MEDIUM
+
+# Ordered kill-chain phases. The attack_chain rule maps each alert to the FIRST
+# phase whose service list or description keyword matches; order defines
+# progression (earlier index = earlier phase).
+attack_phases:
+  - name: reconnaissance
+    services: [icmp, dns, snmp, portscan]
+    keywords: [scan, probe, recon, enumeration, sweep, fingerprint]
+  - name: access
+    services: [ssh, telnet, ftp, rdp, vnc]
+    keywords: [login, brute, credential, auth, password]
+  - name: exploitation
+    services: [http, https, smb, mysql, redis, elasticsearch]
+    keywords: [exploit, injection, rce, upload, payload, cve, shell]
+  - name: exfiltration
+    services: []
+    keywords: [download, exfil, transfer, wget, curl, scp, beacon]
