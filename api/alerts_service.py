@@ -14,9 +14,11 @@ from flask import Flask, request, jsonify, g
 from functools import wraps
 from typing import Dict, List, Tuple, Any, Optional
 
-from api.auth import require_auth, login_required, responder_required, analyst_required
+from api.decorators import require_permission
+from api.rbac import Permission
 from api.middleware import setup_middleware, AuditLogger, RequestLogger, log_request_response, rate_limit
 from api.config import init_config, get_config
+from api.user_manager import UserManager
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -27,6 +29,13 @@ app.config['SECRET_KEY'] = config.get('JWT_SECRET_KEY')
 
 # Setup middleware
 setup_middleware(app)
+
+# Register authentication / user-management routes
+from api.auth_routes import auth_bp
+app.register_blueprint(auth_bp)
+
+# Ensure a bootstrap admin exists on first start (empty users table)
+UserManager().ensure_default_admin()
 
 # Initialize audit logger
 audit_logger = AuditLogger()
@@ -306,7 +315,7 @@ alert_service = AlertService()
 ################################################################################
 
 @app.route('/api/v1/alerts', methods=['POST'])
-@login_required
+@require_permission(Permission.ALERTS_CREATE)
 @log_request_response
 def create_alert():
     """Create new alert"""
@@ -342,7 +351,7 @@ def create_alert():
 
 
 @app.route('/api/v1/alerts', methods=['GET'])
-@analyst_required
+@require_permission(Permission.ALERTS_READ)
 @rate_limit(max_requests=500)
 @log_request_response
 def get_alerts():
@@ -380,7 +389,7 @@ def get_alerts():
 
 
 @app.route('/api/v1/alerts/<alert_id>', methods=['GET'])
-@analyst_required
+@require_permission(Permission.ALERTS_READ)
 @log_request_response
 def get_alert(alert_id):
     """Get specific alert"""
@@ -397,7 +406,7 @@ def get_alert(alert_id):
 
 
 @app.route('/api/v1/alerts/<alert_id>', methods=['PUT'])
-@responder_required
+@require_permission(Permission.ALERTS_UPDATE)
 @log_request_response
 def update_alert(alert_id):
     """Update alert"""
@@ -428,7 +437,7 @@ def update_alert(alert_id):
 
 
 @app.route('/api/v1/alerts/<alert_id>/acknowledge', methods=['POST'])
-@responder_required
+@require_permission(Permission.ALERTS_ACKNOWLEDGE)
 @log_request_response
 def acknowledge_alert(alert_id):
     """Acknowledge alert"""
@@ -463,7 +472,7 @@ def acknowledge_alert(alert_id):
 
 
 @app.route('/api/v1/alerts/<alert_id>/resolve', methods=['POST'])
-@responder_required
+@require_permission(Permission.ALERTS_RESOLVE)
 @log_request_response
 def resolve_alert(alert_id):
     """Resolve alert"""
@@ -499,7 +508,7 @@ def resolve_alert(alert_id):
 
 
 @app.route('/api/v1/alerts/<alert_id>', methods=['DELETE'])
-@responder_required
+@require_permission(Permission.ALERTS_DELETE)
 @log_request_response
 def delete_alert(alert_id):
     """Delete (archive) alert"""
@@ -523,7 +532,7 @@ def delete_alert(alert_id):
 
 
 @app.route('/api/v1/alerts/statistics', methods=['GET'])
-@analyst_required
+@require_permission(Permission.STATS_READ)
 @rate_limit(max_requests=100)
 @log_request_response
 def get_statistics():
@@ -537,7 +546,7 @@ def get_statistics():
 
 
 @app.route('/api/v1/alerts/top-ips', methods=['GET'])
-@analyst_required
+@require_permission(Permission.STATS_READ)
 @rate_limit(max_requests=100)
 @log_request_response
 def get_top_ips():

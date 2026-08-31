@@ -11,7 +11,7 @@
 ### Authentication & Authorization
 - [ ] Change all default passwords
 - [ ] Create strong passwords (16+ characters)
-- [ ] Set up RBAC (Role-Based Access Control)
+- [x] Set up RBAC (Role-Based Access Control)  <!-- api/rbac.py + api/decorators.py; see docs/RBAC-POLICY.md -->
 - [ ] Create service-specific credentials
 - [ ] Document user accounts and roles
 
