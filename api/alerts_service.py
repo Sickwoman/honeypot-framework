@@ -19,6 +19,8 @@ from api.rbac import Permission
 from api.middleware import setup_middleware, AuditLogger, RequestLogger, log_request_response, rate_limit
 from api.config import init_config, get_config
 from api.user_manager import UserManager
+from playbooks.playbook_model import PlaybookManager
+from playbooks.playbook_executor import PlaybookExecutor
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -117,6 +119,11 @@ class AlertService:
             ))
             
             conn.commit()
+
+        try:
+            trigger_matching_playbooks(alert_data, alert_id=alert_id)
+        except Exception:
+            pass
         
         return alert_id
     
@@ -308,6 +315,28 @@ class AlertService:
 
 # Initialize alert service
 alert_service = AlertService()
+playbook_manager = PlaybookManager(os.path.join(os.getcwd(), 'playbooks'))
+playbook_executor = PlaybookExecutor(playbook_manager, db_path=alert_service.db_path)
+
+
+def trigger_matching_playbooks(alert_data: Dict, alert_id: Optional[str] = None, dry_run: bool = False, executed_by: str = "system") -> List[Any]:
+    """Trigger all matching playbooks for a newly created alert."""
+    if not alert_data:
+        return []
+
+    matching = playbook_manager.find_matching_playbooks(alert_data)
+    executions = []
+    for playbook in matching:
+        execution = playbook_executor.execute_playbook(
+            playbook.id,
+            alert_data,
+            alert_id=alert_id,
+            dry_run=dry_run,
+            executed_by=executed_by,
+        )
+        if execution:
+            executions.append(execution)
+    return executions
 
 
 ################################################################################
@@ -589,6 +618,120 @@ def get_correlations():
             payload['graph'] = AttackGraph.from_campaigns(campaigns).to_dict()
         return jsonify(payload)
 
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/v1/playbooks', methods=['GET'])
+@require_permission(Permission.PLAYBOOKS_READ)
+@log_request_response
+def list_playbooks():
+    """List playbooks available to the framework."""
+    try:
+        playbooks = [p.to_dict() for p in playbook_manager.list_playbooks(enabled_only=False)]
+        return jsonify({'playbooks': playbooks})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/v1/playbooks', methods=['POST'])
+@require_permission(Permission.PLAYBOOKS_WRITE)
+@log_request_response
+def create_playbook():
+    """Create a playbook from a dictionary definition."""
+    try:
+        data = request.get_json(silent=True) or {}
+        if not data:
+            return jsonify({'error': 'Playbook definition is required'}), 400
+
+        playbook = playbook_manager.create_playbook(data)
+        return jsonify({'playbook': playbook.to_dict()}), 201
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+
+@app.route('/api/v1/playbooks/<playbook_id>', methods=['GET'])
+@require_permission(Permission.PLAYBOOKS_READ)
+@log_request_response
+def get_playbook(playbook_id):
+    """Fetch a single playbook definition."""
+    try:
+        playbook = playbook_manager.get_playbook(playbook_id)
+        if not playbook:
+            return jsonify({'error': 'Playbook not found'}), 404
+        return jsonify({'playbook': playbook.to_dict()})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/v1/playbooks/<playbook_id>', methods=['PUT'])
+@require_permission(Permission.PLAYBOOKS_WRITE)
+@log_request_response
+def update_playbook(playbook_id):
+    """Update an existing playbook."""
+    try:
+        data = request.get_json(silent=True) or {}
+        if not data:
+            return jsonify({'error': 'No playbook updates provided'}), 400
+
+        updated = playbook_manager.update_playbook(playbook_id, data)
+        if not updated:
+            return jsonify({'error': 'Playbook not found'}), 404
+
+        return jsonify({'playbook': updated.to_dict()})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+
+@app.route('/api/v1/playbooks/<playbook_id>', methods=['DELETE'])
+@require_permission(Permission.PLAYBOOKS_WRITE)
+@log_request_response
+def delete_playbook(playbook_id):
+    """Delete a playbook."""
+    try:
+        deleted = playbook_manager.delete_playbook(playbook_id)
+        if not deleted:
+            return jsonify({'error': 'Playbook not found'}), 404
+        return jsonify({'status': 'deleted', 'playbook_id': playbook_id})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/v1/playbooks/<playbook_id>/execute', methods=['POST'])
+@require_permission(Permission.PLAYBOOKS_EXECUTE)
+@log_request_response
+def execute_playbook_route(playbook_id):
+    """Execute a named playbook against a supplied alert payload."""
+    try:
+        data = request.get_json(silent=True) or {}
+        alert_data = data.get('alert_data') or data.get('alert') or {}
+        dry_run = bool(data.get('dry_run', False))
+        alert_id = data.get('alert_id') or alert_data.get('id')
+
+        execution = playbook_executor.execute_playbook(
+            playbook_id=playbook_id,
+            alert_data=alert_data,
+            alert_id=alert_id,
+            dry_run=dry_run,
+            executed_by=g.username,
+        )
+
+        if not execution:
+            return jsonify({'error': 'Playbook not found or execution failed'}), 404
+
+        return jsonify({'execution': execution.to_dict()})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/v1/playbooks/<playbook_id>/history', methods=['GET'])
+@require_permission(Permission.PLAYBOOKS_READ)
+@log_request_response
+def get_playbook_history(playbook_id):
+    """Fetch execution history for a playbook."""
+    try:
+        history = playbook_executor.get_execution_history(playbook_id, limit=25)
+        return jsonify({'history': history})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

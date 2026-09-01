@@ -1,0 +1,26 @@
+id: port-scan-isolate
+name: Port Scan Isolation
+description: Isolates the honeypot and escalates if a port scan indicates reconnaissance activity.
+version: 1.0.0
+author: Honeypot Framework
+enabled: true
+tags: [scan, reconnaissance, isolate]
+trigger:
+  type: alert
+  conditions:
+    alert_name: PortScan
+    severity: MEDIUM
+on_failure: continue
+actions:
+  - id: notify_1
+    type: notify
+    channels: [slack]
+    webhook_url: https://hooks.example.com/slack
+    message: "Port scan from {{ source_ip }} on {{ honeypot_type }}"
+  - id: isolate_1
+    type: isolate_honeypot
+    duration: 1h
+    preserve_logs: true
+  - id: delay_1
+    type: delay
+    duration: 30s
