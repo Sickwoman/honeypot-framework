@@ -19,7 +19,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
-from api.alerts_service import AlertService
+from api.alerts_service import AlertService, enrich_alert_with_threat_intel
 
 logger = logging.getLogger(__name__)
 
@@ -140,9 +140,10 @@ def ingest_honeypot_line(line: str, db_path: str = None) -> Optional[str]:
     if not alert_data:
         return None
 
+    enriched_alert = enrich_alert_with_threat_intel(alert_data) or alert_data
     service = AlertService(db_path=db_path)
-    alert_id = service.create_alert(alert_data)
-    logger.info("Created alert %s from honeypot event: %s", alert_id, alert_data.get("alert_name"))
+    alert_id = service.create_alert(enriched_alert)
+    logger.info("Created alert %s from honeypot event: %s", alert_id, enriched_alert.get("alert_name"))
     return alert_id
 
 
