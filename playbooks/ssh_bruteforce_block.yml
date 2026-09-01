@@ -1,0 +1,30 @@
+id: ssh-bruteforce-block
+name: SSH Brute Force Block
+description: Blocks an attacking IP and alerts responders after repeated SSH brute force attempts.
+version: 1.0.0
+author: Honeypot Framework
+enabled: true
+tags: [ssh, brute-force, responder]
+trigger:
+  type: alert
+  conditions:
+    alert_name: SSHBruteForce
+    severity: HIGH
+on_failure: continue
+actions:
+  - id: notify_1
+    type: notify
+    name: notify_soc
+    channels: [email]
+    recipient: soc@example.com
+    message: "{{ source_ip }} triggered SSH brute force against {{ honeypot_type }}"
+  - id: block_ip_1
+    type: block_ip
+    name: block_attacker
+    duration: 24h
+  - id: create_incident_1
+    type: create_incident
+    title: SSH brute force detected
+    description: Automated response initiated after repeated SSH password guessing.
+    severity: HIGH
+    category: credential_attack

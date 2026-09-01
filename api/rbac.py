@@ -39,6 +39,11 @@ class Permission:
     # Statistics / dashboards
     STATS_READ = "stats:read"
 
+    # Playbooks
+    PLAYBOOKS_READ = "playbooks:read"
+    PLAYBOOKS_WRITE = "playbooks:write"
+    PLAYBOOKS_EXECUTE = "playbooks:execute"
+
     # Incidents
     INCIDENTS_READ = "incidents:read"
     INCIDENTS_CREATE = "incidents:create"
@@ -68,11 +73,13 @@ class Permission:
 _OBSERVER_PERMS: Set[str] = {
     Permission.ALERTS_READ,
     Permission.STATS_READ,
+    Permission.PLAYBOOKS_READ,
     Permission.INCIDENTS_READ,
 }
 
 _ANALYST_PERMS: Set[str] = _OBSERVER_PERMS | {
     Permission.ALERTS_CREATE,
+    Permission.PLAYBOOKS_WRITE,
     Permission.INCIDENTS_CREATE,
     Permission.APIKEY_CREATE,
 }
@@ -82,6 +89,7 @@ _RESPONDER_PERMS: Set[str] = _ANALYST_PERMS | {
     Permission.ALERTS_ACKNOWLEDGE,
     Permission.ALERTS_RESOLVE,
     Permission.ALERTS_DELETE,
+    Permission.PLAYBOOKS_EXECUTE,
     Permission.INCIDENTS_UPDATE,
     Permission.INCIDENTS_CLOSE,
 }
