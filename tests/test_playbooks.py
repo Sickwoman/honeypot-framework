@@ -1,3 +1,4 @@
+import json
 import os
 import tempfile
 
@@ -120,3 +121,37 @@ actions:
 
     assert len(executions) == 1
     assert executions[0].playbook_name == "Match alert"
+
+
+def test_alert_creation_enriches_threat_intel_for_source_ip(tmp_path, monkeypatch):
+    service = alerts_module.AlertService(db_path=str(tmp_path / "alerts.db"))
+
+    fake_result = {
+        "ip": "203.0.113.42",
+        "threat_intel": {
+            "ip": "203.0.113.42",
+            "threat_score": 82,
+            "threat_level": "HIGH",
+            "threat_indicators": ["blacklisted", "high_abuse_confidence"],
+        },
+    }
+
+    def fake_run(*args, **kwargs):
+        return type("Completed", (), {"returncode": 0, "stdout": json.dumps(fake_result)})()
+
+    monkeypatch.setattr(alerts_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(alerts_module, "_NODE_THREAT_INTEL_SCRIPT", str(tmp_path / "advanced-threat-intel.js"))
+    monkeypatch.setattr(alerts_module.os.path, "exists", lambda path: True)
+
+    alert_id = service.create_alert({
+        "alert_name": "SSHBruteForce",
+        "severity": "HIGH",
+        "source_ip": "203.0.113.42",
+        "honeypot_type": "cowrie",
+        "service_name": "ssh",
+    })
+
+    stored = service.get_alert(alert_id)
+    assert stored["threat_score"] == 82
+    assert stored["threat_level"] == "HIGH"
+    assert json.loads(stored["metadata"])['threat_intel']['threat_score'] == 82

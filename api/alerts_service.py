@@ -8,6 +8,8 @@
 import os
 import sqlite3
 import json
+import subprocess
+import sys
 import uuid
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, g
@@ -84,6 +86,7 @@ class AlertService:
         Returns:
             Alert ID
         """
+        alert_data = enrich_alert_with_threat_intel(alert_data) or alert_data
         alert_id = str(uuid.uuid4())
         
         with self._get_connection() as conn:
@@ -311,6 +314,46 @@ class AlertService:
             """, (limit,))
             
             return [dict(row) for row in cursor.fetchall()]
+
+
+_NODE_THREAT_INTEL_SCRIPT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'threatintel', 'advanced-threat-intel.js'))
+
+
+def enrich_alert_with_threat_intel(alert_data: Optional[Dict]) -> Optional[Dict]:
+    """Enhance an alert with threat-intel metadata from the Node-based enricher when possible."""
+    if not alert_data or not alert_data.get('source_ip'):
+        return alert_data
+
+    if not os.path.exists(_NODE_THREAT_INTEL_SCRIPT):
+        return alert_data
+
+    try:
+        result = subprocess.run(
+            ['node', _NODE_THREAT_INTEL_SCRIPT, '--ip', str(alert_data['source_ip'])],
+            capture_output=True,
+            text=True,
+            check=False,
+            env={**os.environ, 'ABUSEIPDB_API_KEY': os.environ.get('ABUSEIPDB_API_KEY', ''), 'VT_API_KEY': os.environ.get('VT_API_KEY', '')},
+        )
+        if result.returncode != 0:
+            return alert_data
+
+        payload = json.loads(result.stdout or '{}')
+        threat_intel = payload.get('threat_intel') or {}
+        threat_score = threat_intel.get('threat_score', alert_data.get('threat_score', 0.0))
+        threat_level = threat_intel.get('threat_level', alert_data.get('threat_level', 'UNKNOWN'))
+        indicators = threat_intel.get('threat_indicators', alert_data.get('threat_indicators', []))
+
+        enhanced = dict(alert_data)
+        enhanced['threat_score'] = threat_score
+        enhanced['threat_level'] = threat_level
+        enhanced['threat_indicators'] = indicators
+        enhanced['metadata'] = {**alert_data.get('metadata', {}), 'threat_intel': threat_intel}
+        if 'severity' in enhanced and enhanced['severity'] in {'HIGH', 'CRITICAL'} and threat_level in {'HIGH', 'CRITICAL'}:
+            enhanced['severity'] = enhanced['severity']
+        return enhanced
+    except Exception:
+        return alert_data
 
 
 # Initialize alert service

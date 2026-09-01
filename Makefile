@@ -27,6 +27,9 @@ help:
 	@echo "  make backup       - Backup all data"
 	@echo "  make restore      - Restore from backup"
 	@echo ""
+	@echo "Threat Intelligence:"
+	@echo "  make threat-intel - Run the Node-based threat intel enrichment utility"
+	@echo ""
 	@echo "AWS Deployment:"
 	@echo "  make terraform-init    - Initialize Terraform"
 	@echo "  make terraform-plan    - Plan AWS deployment"
@@ -102,6 +105,10 @@ test:
 	@echo "🎯 Running attack simulations..."
 	chmod +x scripts/simulate-attacks.sh
 	./scripts/simulate-attacks.sh
+
+threat-intel:
+	@echo "🧠 Running advanced threat intelligence enrichment..."
+	@node threatintel/advanced-threat-intel.js --help
 
 estimate:
 	@echo "💰 Estimating AWS costs..."
