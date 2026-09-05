@@ -51,6 +51,9 @@ venv/
 ENV/
 env/
 
+# Node.js frontend dependencies
+node_modules/
+
 # Docker
 docker-compose.override.yml
 .dockerignore
