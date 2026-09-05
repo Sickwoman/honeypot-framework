@@ -54,6 +54,10 @@ env/
 # Node.js frontend dependencies
 node_modules/
 
+# .NET build output
+**/bin/
+**/obj/
+
 # Docker
 docker-compose.override.yml
 .dockerignore
