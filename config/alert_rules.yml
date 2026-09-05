@@ -56,3 +56,42 @@ groups:
           summary: "Elasticsearch cluster unhealthy"
           description: "Elasticsearch status is {{ $value }}"
 
+  - name: deception_sentinel_alerts
+    interval: 30s
+    rules:
+      - alert: DeceptionSentinelFailed
+        expr: honeypot_sentinel_status == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Deception sentinel detected a failure"
+          description: "At least one honeypot integrity or isolation check has failed."
+
+      - alert: HoneypotProbeFailed
+        expr: honeypot_sentinel_check_status{check=~"cowrie_.*|opencanary_.*"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Honeypot probe failed"
+          description: "The {{ $labels.check }} endpoint is no longer reachable."
+
+      - alert: HoneypotManagementPortExposed
+        expr: honeypot_sentinel_check_status{check=~".*not_exposed.*"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Management port exposed on honeypot host"
+          description: "The {{ $labels.check }} isolation check failed. Investigate firewall and service bindings immediately."
+
+      - alert: DeceptionSentinelMissing
+        expr: absent(honeypot_sentinel_status)
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Deception sentinel metrics are missing"
+          description: "Prometheus has not received sentinel metrics for 5 minutes."
+

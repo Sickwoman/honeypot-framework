@@ -34,3 +34,8 @@ scrape_configs:
       - targets: ['localhost:8000']
     scrape_interval: 10s
 
+  - job_name: 'deception-sentinel'
+    static_configs:
+      - targets: ['localhost:8010']
+    scrape_interval: 30s
+

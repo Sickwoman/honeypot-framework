@@ -1,0 +1,27 @@
+# Run this from the monitoring host, not from an attacker-facing interface.
+honeypots:
+  - name: cowrie_ssh
+    host: 192.168.56.101
+    port: 2222
+  - name: opencanary_http
+    host: 192.168.56.101
+    port: 80
+  - name: opencanary_ftp
+    host: 192.168.56.101
+    port: 21
+
+# These management services must not be listening on the honeypot host.
+forbidden_ports:
+  - name: elasticsearch_not_exposed_to_honeypot
+    host: 192.168.56.101
+    port: 9200
+  - name: kibana_not_exposed_to_honeypot
+    host: 192.168.56.101
+    port: 5601
+
+elasticsearch:
+  enabled: true
+  url: https://localhost:9200
+  username: elastic
+  # Prefer ELASTICSEARCH_PASSWORD instead of storing a password here.
+  verify_tls: false
