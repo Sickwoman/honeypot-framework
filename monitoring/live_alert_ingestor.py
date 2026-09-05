@@ -20,8 +20,25 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
 from api.alerts_service import AlertService, enrich_alert_with_threat_intel
+from threatintel.honeytokens import build_trigger_alert, find_triggered_tokens, load_manifest
 
 logger = logging.getLogger(__name__)
+
+
+def parse_honeytoken_event(line: str) -> Optional[Dict]:
+    """Return a critical alert when a configured synthetic value is observed."""
+    manifest_path = os.getenv("HONEYTOKEN_MANIFEST")
+    if not manifest_path:
+        return None
+    try:
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            event = line
+        manifest = load_manifest(manifest_path)
+    except (OSError, ValueError):
+        return None
+    return build_trigger_alert(event, find_triggered_tokens(event, manifest))
 
 
 def parse_cowrie_line(line: str) -> Optional[Dict]:
@@ -128,6 +145,9 @@ def parse_opencanary_line(line: str) -> Optional[Dict]:
 
 def parse_honeypot_line(line: str) -> Optional[Dict]:
     """Parse a raw honeypot log line into an alert payload if it is suspicious."""
+    honeytoken_alert = parse_honeytoken_event(line)
+    if honeytoken_alert:
+        return honeytoken_alert
     parsed = parse_cowrie_line(line)
     if parsed:
         return parsed
