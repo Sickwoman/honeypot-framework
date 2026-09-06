@@ -20,6 +20,9 @@ type Alert = {
   metadata?: string | Record<string, unknown>;
 };
 
+type Playbook = { id: string; name: string; description?: string };
+type ReplayEvent = { label: string; detail: string; source: string; time: string };
+
 const demoAlerts: Alert[] = [
   {
     id: 'demo-honeytoken', alert_name: 'HoneytokenTriggered', severity: 'CRITICAL', status: 'active',
@@ -57,6 +60,11 @@ const state = {
   lastSync: new Date(),
   apiUrl: localStorage.getItem('nightwatch-api') || '/api/v1/alerts',
   token: localStorage.getItem('nightwatch-token') || '',
+  incidentStatus: 'OPEN' as 'OPEN' | 'CONTAINED' | 'RESOLVED',
+  actionMessage: 'Awaiting operator decision',
+  actionBusy: false,
+  replayIndex: 0,
+  replayPlaying: false,
 };
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
@@ -110,6 +118,33 @@ function graph(alert: Alert): string {
   </div>`;
 }
 
+function replayEvents(alert: Alert): ReplayEvent[] {
+  const meta = metadata(alert);
+  if (Array.isArray(meta.events)) {
+    const events = meta.events as Array<Record<string, unknown>>;
+    return events.map((event, index) => ({
+      label: String(event.type || event.action || `event-${index + 1}`),
+      detail: String(event.command || event.path || event.detail || alert.description || 'Observed activity'),
+      source: String(event.source || alert.service_name || 'sensor'),
+      time: String(event.timestamp || alert.first_seen || ''),
+    }));
+  }
+  const phases = Array.isArray(meta.phases) ? meta.phases as string[] : ['reconnaissance', 'access', 'exploitation'];
+  return phases.map((phase, index) => ({
+    label: phase,
+    detail: index === 0 ? `Connection observed from ${alert.source_ip || 'unknown actor'}` : index === 1 ? `Access attempt against ${alert.service_name || 'exposed service'}` : alert.description || 'Payload behavior observed by the sensor',
+    source: alert.honeypot_type || 'sensor mesh',
+    time: alert.first_seen || '',
+  }));
+}
+
+function replayPanel(alert: Alert): string {
+  const events = replayEvents(alert);
+  const current = events[Math.min(state.replayIndex, events.length - 1)] || events[0];
+  const progress = events.length > 1 ? (state.replayIndex / (events.length - 1)) * 100 : 0;
+  return `<section class="replay-panel"><div class="panel-head"><div><p class="eyebrow">ATTACK REPLAY</p><h3>Reconstructed session</h3></div><span class="replay-badge">${state.replayPlaying ? 'PLAYING' : 'PAUSED'} / ${state.replayIndex + 1} OF ${events.length}</span></div><div class="replay-track"><input id="replay-scrubber" type="range" min="0" max="${Math.max(events.length - 1, 0)}" value="${state.replayIndex}" style="--progress: ${progress}%" aria-label="Replay event position"/><div class="replay-times"><span>${events[0]?.time ? new Date(events[0].time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'start'}</span><span>${current?.time ? new Date(current.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'now'}</span></div></div><div class="replay-event"><span class="replay-index">${String(state.replayIndex + 1).padStart(2, '0')}</span><div><b>${esc(current?.label || 'No replay event')}</b><p>${esc(current?.detail || 'No event evidence available')}</p></div><span class="replay-source">${esc(current?.source || 'sensor')}</span></div><div class="replay-controls"><button class="replay-button" data-action="replay-toggle">${state.replayPlaying ? 'Pause replay' : 'Play replay'}</button><span>Evidence reconstructed from alert telemetry</span></div></section>`;
+}
+
 function render(): void {
   const visible = filteredAlerts();
   const selected = selectedAlert();
@@ -144,8 +179,10 @@ function render(): void {
       <article class="investigation">
         <div class="investigation-head"><div><div class="crumb">INVESTIGATION / ${esc(selected.service_name || 'SIGNAL')}</div><h3>${esc(selected.alert_name)}</h3><p>${esc(selected.description)}</p></div><div class="head-actions"><span class="confidence">${Math.round((selected.threat_score || .72) * 100)}% confidence</span><button class="ack-button" data-action="ack">${selected.acknowledged || selected.status === 'acknowledged' ? 'Acknowledged' : 'Acknowledge'}</button></div></div>
         <div class="story-bar"><span class="story-icon">✦</span><div><b>ATTACK STORY</b><p>Activity traced from <strong>${esc(selected.source_ip || 'an unknown actor')}</strong> through ${esc(selected.honeypot_type || 'the sensor mesh')}.</p></div><span class="story-arrow">→</span></div>
+        ${replayPanel(selected)}
         <div class="canvas-grid"><section class="canvas-panel timeline-panel"><div class="panel-head"><div><p class="eyebrow">CHAIN OF EVENTS</p><h3>Observed progression</h3></div><span class="event-count">${phases.length} phases</span></div><div class="timeline">${phases.map((phase, index) => `<div class="timeline-item"><div class="timeline-marker ${index === phases.length - 1 ? 'current' : ''}">${index + 1}</div><div><b>${esc(phase)}</b><p>${index === 0 ? 'Initial activity detected by sensor mesh' : index === 1 ? 'Credentials or service access attempted' : 'Payload behavior or persistence observed'}</p><time>${index === phases.length - 1 ? relativeTime(selected.last_seen || selected.first_seen) : `${index + 1} events earlier`}</time></div></div>`).join('')}</div></section><section class="canvas-panel map-panel"><div class="panel-head"><div><p class="eyebrow">RELATIONSHIP MAP</p><h3>Signal topology</h3></div><span class="map-key">● live path</span></div>${graph(selected)}</section></div>
         <section class="evidence-panel"><div class="panel-head"><div><p class="eyebrow">EVIDENCE LOCKER</p><h3>What we know</h3></div><span class="locked">▣ preserved</span></div><div class="evidence-grid"><div><span>Source address</span><strong>${esc(selected.source_ip || 'Unknown')}</strong></div><div><span>Target service</span><strong>${esc(selected.service_name || 'Unknown')}</strong></div><div><span>Threat level</span><strong class="${severityClass(selected.threat_level)}">${esc(selected.threat_level || selected.severity)}</strong></div><div><span>Detection ID</span><strong class="mono">${esc(selected.id.slice(0, 14))}</strong></div></div></section>
+        <section class="response-panel"><div class="panel-head"><div><p class="eyebrow">RESPONSE CONTROL</p><h3>Decide what happens next</h3></div><span class="incident-state ${state.incidentStatus.toLowerCase()}">${state.incidentStatus}</span></div><div class="response-grid"><button class="response-action" data-action="contain" ${state.actionBusy ? 'disabled' : ''}><span class="action-icon">⊘</span><span><b>Contain source</b><small>Run the matching isolation playbook</small></span><strong>→</strong></button><button class="response-action" data-action="resolve" ${state.actionBusy ? 'disabled' : ''}><span class="action-icon">✓</span><span><b>Resolve incident</b><small>Close with an operator audit trail</small></span><strong>→</strong></button></div><div class="action-status"><span class="status-dot ${state.actionBusy ? 'online' : ''}"></span>${esc(state.actionMessage)}</div></section>
       </article>
     </section>
     <footer class="footer"><span>Nightwatch / deception intelligence console</span><span>API ${esc(state.apiUrl)} <i class="status-dot ${state.demo ? '' : 'online'}"></i></span></footer>
@@ -154,12 +191,16 @@ function render(): void {
 }
 
 function bindEvents(): void {
-  document.querySelectorAll<HTMLElement>('[data-alert-id]').forEach((element) => element.onclick = () => { state.selectedId = element.dataset.alertId || state.selectedId; render(); });
+  document.querySelectorAll<HTMLElement>('[data-alert-id]').forEach((element) => element.onclick = () => { state.selectedId = element.dataset.alertId || state.selectedId; state.replayIndex = 0; state.replayPlaying = false; state.incidentStatus = 'OPEN'; state.actionMessage = 'Awaiting operator decision'; render(); });
   document.querySelector<HTMLInputElement>('#search')?.addEventListener('input', (event) => { state.search = (event.target as HTMLInputElement).value; render(); const input = document.querySelector<HTMLInputElement>('#search'); input?.focus(); input?.setSelectionRange(input.value.length, input.value.length); });
   document.querySelector<HTMLSelectElement>('#severity')?.addEventListener('change', (event) => { state.severity = (event.target as HTMLSelectElement).value; render(); });
   document.querySelectorAll<HTMLElement>('[data-action="toggle-live"]').forEach((button) => button.onclick = () => { state.live = !state.live; render(); });
   document.querySelectorAll<HTMLElement>('[data-action="ack"]').forEach((button) => button.onclick = acknowledge);
   document.querySelectorAll<HTMLElement>('[data-action="settings"]').forEach((button) => button.onclick = configureApi);
+  document.querySelectorAll<HTMLElement>('[data-action="contain"]').forEach((button) => button.onclick = containSource);
+  document.querySelectorAll<HTMLElement>('[data-action="resolve"]').forEach((button) => button.onclick = resolveIncident);
+  document.querySelectorAll<HTMLElement>('[data-action="replay-toggle"]').forEach((button) => button.onclick = () => { state.replayPlaying = !state.replayPlaying; render(); });
+  document.querySelector<HTMLInputElement>('#replay-scrubber')?.addEventListener('input', (event) => { state.replayIndex = Number((event.target as HTMLInputElement).value); state.replayPlaying = false; render(); });
 }
 
 async function acknowledge(): Promise<void> {
@@ -169,6 +210,67 @@ async function acknowledge(): Promise<void> {
     await fetch(`${state.apiUrl.replace(/\/alerts$/, '')}/alerts/${alert.id}/acknowledge`, { method: 'POST', headers: authHeaders() });
     await fetchAlerts();
   } catch { state.demo = true; state.alerts = demoAlerts; render(); }
+}
+
+async function containSource(): Promise<void> {
+  const alert = selectedAlert();
+  state.actionBusy = true;
+  state.actionMessage = state.demo ? 'Simulating containment in local preview...' : 'Finding a matching response playbook...';
+  render();
+  if (state.demo) {
+    await new Promise((resolve) => window.setTimeout(resolve, 650));
+    state.incidentStatus = 'CONTAINED';
+    state.actionMessage = `Source ${alert.source_ip || 'actor'} marked for isolation (demo)`;
+    state.actionBusy = false;
+    render();
+    return;
+  }
+  try {
+    const playbookResponse = await fetch(`${state.apiUrl.replace(/\/alerts$/, '')}/playbooks`, { headers: authHeaders() });
+    if (!playbookResponse.ok) throw new Error('Playbooks unavailable');
+    const payload = await playbookResponse.json() as { playbooks?: Playbook[] };
+    const playbook = payload.playbooks?.find((item) => /block|isolate|contain/i.test(`${item.id} ${item.name}`)) || payload.playbooks?.[0];
+    if (!playbook) throw new Error('No response playbook configured');
+    const response = await fetch(`${state.apiUrl.replace(/\/alerts$/, '')}/playbooks/${playbook.id}/execute`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ alert_id: alert.id, alert_data: alert, dry_run: false }),
+    });
+    if (!response.ok) throw new Error('Playbook execution failed');
+    state.incidentStatus = 'CONTAINED';
+    state.actionMessage = `${playbook.name} completed for ${alert.source_ip || 'source actor'}`;
+  } catch (error) {
+    state.actionMessage = error instanceof Error ? error.message : 'Containment could not be completed';
+  }
+  state.actionBusy = false;
+  render();
+}
+
+async function resolveIncident(): Promise<void> {
+  const alert = selectedAlert();
+  state.actionBusy = true;
+  state.actionMessage = state.demo ? 'Writing resolution to local preview...' : 'Recording resolution...';
+  render();
+  if (state.demo) {
+    await new Promise((resolve) => window.setTimeout(resolve, 450));
+    state.incidentStatus = 'RESOLVED';
+    state.actionMessage = 'Incident resolved by operator (demo)';
+    state.actionBusy = false;
+    render();
+    return;
+  }
+  try {
+    const response = await fetch(`${state.apiUrl.replace(/\/alerts$/, '')}/alerts/${alert.id}/resolve`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ notes: 'Resolved from Nightwatch command center' }),
+    });
+    if (!response.ok) throw new Error('Resolution request failed');
+    state.incidentStatus = 'RESOLVED';
+    state.actionMessage = 'Incident resolved and audit entry recorded';
+  } catch (error) {
+    state.actionMessage = error instanceof Error ? error.message : 'Resolution could not be recorded';
+  }
+  state.actionBusy = false;
+  render();
 }
 
 function authHeaders(): HeadersInit {
@@ -204,3 +306,10 @@ async function fetchAlerts(): Promise<void> {
 state.alerts = demoAlerts;
 render();
 setInterval(fetchAlerts, 10_000);
+setInterval(() => {
+  if (!state.replayPlaying) return;
+  const length = replayEvents(selectedAlert()).length;
+  if (state.replayIndex >= length - 1) { state.replayPlaying = false; return; }
+  state.replayIndex += 1;
+  render();
+}, 1400);
