@@ -1,4 +1,4 @@
-.PHONY: help install deploy start stop restart logs test backup restore clean validate
+.PHONY: help install deploy start stop restart logs test lint typecheck simulate up up-elk down backup restore clean validate
 
 # Variables
 PROJECT_NAME := honeypot-framework
@@ -19,8 +19,16 @@ help:
 	@echo "  make status       - Check service status"
 	@echo "  make health       - Run health check"
 	@echo ""
+	@echo "Docker Stack:"
+	@echo "  make up           - Start the local stack (honeypot, API, ingestor, dashboard)"
+	@echo "  make up-elk       - Same, plus Elasticsearch and Kibana"
+	@echo "  make down         - Stop the local stack"
+	@echo ""
 	@echo "Testing Commands:"
-	@echo "  make test         - Run attack simulations"
+	@echo "  make test         - Run the pytest suite"
+	@echo "  make lint         - Run ruff"
+	@echo "  make typecheck    - Run mypy"
+	@echo "  make simulate     - Run attack simulations against the honeypot"
 	@echo "  make estimate     - Estimate AWS costs"
 	@echo ""
 	@echo "Backup & Restore:"
@@ -102,9 +110,33 @@ health:
 	./scripts/check-services.sh
 
 test:
-	@echo "🎯 Running attack simulations..."
+	@echo "🧪 Running test suite..."
+	pytest
+
+lint:
+	@echo "🔍 Linting..."
+	ruff check .
+
+typecheck:
+	@echo "🔍 Type checking..."
+	mypy api analytics playbooks monitoring
+
+simulate:
+	@echo "🎯 Running attack simulations against the honeypot..."
 	chmod +x scripts/simulate-attacks.sh
 	./scripts/simulate-attacks.sh
+
+up:
+	@echo "🚀 Starting the local stack (honeypot, API, ingestor, dashboard)..."
+	docker compose up --build
+
+up-elk:
+	@echo "🚀 Starting the local stack with Elasticsearch and Kibana..."
+	docker compose --profile elk up --build
+
+down:
+	@echo "🛑 Stopping the local stack..."
+	docker compose down
 
 threat-intel:
 	@echo "🧠 Running advanced threat intelligence enrichment..."
@@ -147,7 +179,7 @@ terraform-destroy:
 validate:
 	@echo "✅ Validating Terraform..."
 	cd terraform/environments/local && terraform validate
-	cd ~/Desktop/honeypot-framework/terraform/environments/aws-us-east && terraform validate
+	cd terraform/environments/aws-us-east && terraform validate
 	@echo "✅ All configurations valid"
 
 clean:
@@ -162,7 +194,7 @@ clean-all: clean
 	@echo "🗑️  WARNING: Removing all data and containers!"
 	@read -p "Continue? (yes/no): " CONFIRM; \
 	if [ "$$CONFIRM" = "yes" ]; then \
-		docker-compose -f ~/elk-stack/docker-compose.yml down -v; \
+		docker compose down -v; \
 		sudo systemctl stop cowrie opencanary elk-stack; \
 		rm -rf ~/honeypot-backups/*; \
 		@echo "✅ All data removed"; \

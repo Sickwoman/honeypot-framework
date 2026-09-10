@@ -1,53 +1,58 @@
 # Monitoring & Log Aggregation
 
-## Phase 1.5 — Local Lab Visualization
+## Components
 
-### Components
+**Live alert ingestor** — [`live_alert_ingestor.py`](live_alert_ingestor.py)
 
-**ELK Stack (Docker)**
-- Elasticsearch 7.14.0 on port 9200
-- Kibana 7.14.0 on port 5601
-- Logstash 7.14.0 on port 5000
+Tails honeypot logs, converts events into alert payloads, and inserts them via
+`AlertService`. Because alert creation triggers matching playbooks, an ingested
+event immediately drives incident-response automation.
 
-**Log Sources**
-- Cowrie SSH honeypot: `/home/cowrie/cowrie/var/log/cowrie/cowrie.log`
-- OpenCanary multi-service: `/var/tmp/opencanary.log`
-
-### Setup
+It tails every configured log concurrently (one thread each), starts at
+end-of-file so a restart doesn't replay history, and waits for a log file to
+appear rather than exiting if the honeypot hasn't written yet.
 
 ```bash
-cd ~/elk-stack
-docker-compose up -d
+# Paths from argv, else $HONEYPOT_LOG_PATHS, else the built-in defaults
+python -m monitoring.live_alert_ingestor /path/to/cowrie.log
 ```
 
-### Access
+| Variable | Default | Purpose |
+|---|---|---|
+| `HONEYPOT_LOG_PATHS` | Cowrie + OpenCanary defaults | Comma/colon-separated log paths |
+| `INGESTOR_WAIT_FOR_LOGS` | `true` | Wait for missing log files instead of exiting |
+| `INGESTOR_READ_FROM_START` | `false` | Replay existing log content on start |
+| `INGESTOR_POLL_SECONDS` | `2.0` | Poll interval |
+| `HONEYTOKEN_MANIFEST` | unset | Enables honeytoken tripwire detection |
 
-- **Kibana Dashboard**: http://localhost:5601
-- **Elasticsearch API**: http://localhost:9200
+**Terminal dashboard** — [`honeypot_dashboard.py`](honeypot_dashboard.py)
 
-### Dashboard Script
+A print-based summary of Cowrie/OpenCanary logs, kept for quick shell use. The
+[Nightwatch web dashboard](../frontend/) supersedes it for day-to-day work.
 
-Quick view of all honeypot attacks:
+## Running the stack
+
+The ELK stack lives in the repo-root [`docker-compose.yml`](../docker-compose.yml)
+behind an optional profile (this directory previously held a second, separate
+compose file that bind-mounted host paths which don't exist on most machines):
 
 ```bash
-cd ~/elk-stack
-python3 honeypot_dashboard.py
+docker compose --profile elk up     # Elasticsearch :9200, Kibana :5601, Logstash
 ```
 
-Shows:
-- Cowrie SSH attempts and commands
-- OpenCanary port scans and login attempts
-- Captured credentials
-- HTTP requests
-- Overall attack statistics
+The Logstash pipeline is [`config/logstash-secure.conf`](../config/logstash-secure.conf),
+the canonical config — it reads Cowrie's structured `cowrie.json` and
+OpenCanary's JSON log, and ships to Elasticsearch over TLS with credentials
+from the environment.
 
-### Log Format
+Note the core alert loop does **not** require Elasticsearch: alerts are stored
+in SQLite by `api/alerts_service.py`. ELK adds search and Kibana dashboards on
+top of the raw honeypot logs.
 
-**Cowrie**: Text logs with timestamps and event details
-**OpenCanary**: JSON format with source/destination IPs, ports, and credentials
+## Log formats
 
-### Next Steps
+- **Cowrie** — `cowrie.log` is plain text (what the ingestor parses);
+  `cowrie.json` is structured (what Logstash consumes).
+- **OpenCanary** — JSON, with source/destination IPs, ports, and credentials.
 
-- Phase 2: Migrate logs to CloudWatch (AWS)
-- Phase 3: Add GeoIP enrichment
-- Phase 4: Threat intelligence integration
+See [docs/QUICKSTART.md](../docs/QUICKSTART.md) for the full walkthrough.

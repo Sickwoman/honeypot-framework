@@ -81,9 +81,17 @@ class AlertService:
                 conn.commit()
     
     def _get_connection(self) -> sqlite3.Connection:
-        """Get database connection"""
-        conn = sqlite3.connect(self.db_path)
+        """Get database connection.
+
+        WAL + a busy timeout because the API and the log ingestor run as
+        separate processes against this same file (see docker-compose.yml);
+        the default journal mode makes concurrent writes fail with
+        "database is locked".
+        """
+        conn = sqlite3.connect(self.db_path, timeout=15)
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=15000")
         return conn
     
     def create_alert(self, alert_data: Dict) -> str:

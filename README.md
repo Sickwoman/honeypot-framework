@@ -1,10 +1,9 @@
 # 🍯 Honeypot Framework
 
+[![CI](https://github.com/Sickwoman/honeypot-framework/actions/workflows/ci.yml/badge.svg)](https://github.com/Sickwoman/honeypot-framework/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-green.svg)](https://www.python.org/)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%20%7C%203.12-green.svg)](https://www.python.org/)
 [![Terraform](https://img.shields.io/badge/terraform-1.0+-orange.svg)](https://www.terraform.io/)
-[![Docker](https://img.shields.io/badge/docker-supported-blue.svg)](https://www.docker.com/)
-[![Status](https://img.shields.io/badge/status-production%20ready-brightgreen.svg)](#status)
 
 A **cloud-native honeypot deployment framework** for capturing, analyzing, and visualizing cyber attacks across multiple geographic regions.
 
@@ -13,7 +12,7 @@ A **cloud-native honeypot deployment framework** for capturing, analyzing, and v
 ### 🎯 Honeypot Services
 - **Cowrie SSH Honeypot** — Captures SSH login attempts and command execution
 - **OpenCanary Multi-Service** — Simulates FTP, HTTP, MySQL, SSH, Telnet services
-- **Real Attack Capture** — 100+ attacks logged and analyzed
+- **Attack Simulation Harness** — `scripts/simulate-attacks.sh` drives traffic at the honeypot so you can exercise the full detection pipeline locally
 
 ### 📊 Log Aggregation & Visualization
 - **Elasticsearch 7.14.0** — Centralized log storage and indexing
@@ -40,29 +39,45 @@ A **cloud-native honeypot deployment framework** for capturing, analyzing, and v
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Kali Linux or Ubuntu 22.04+
-- Docker and Docker Compose
-- Terraform 1.0+
-- Python 3.8+
-- AWS Account (for Phase 2)
+- Docker and Docker Compose (any OS), **or** Python 3.11+ for the test suite alone
+- Terraform 1.0+ and an AWS account (only for the cloud deployment)
 
-### Local Setup (5 minutes)
+### Local stack (one command)
 
 ```bash
-# Clone repository
 git clone https://github.com/Sickwoman/honeypot-framework.git
 cd honeypot-framework
 
-# Deploy local lab
-chmod +x scripts/deploy.sh
-./scripts/deploy.sh
+cp .env.example .env
+python3 -c "import secrets; print('JWT_SECRET_KEY=' + secrets.token_urlsafe(32))" >> .env
 
-# View dashboard
-python3 scripts/check-services.sh
-
-# Access Kibana
-open http://localhost:5601
+docker compose up --build
 ```
+
+| Service | Where |
+|---|---|
+| Cowrie SSH honeypot (the trap) | `localhost:2222` |
+| Nightwatch dashboard | http://localhost:8080 |
+| Alert API | http://localhost:8000 |
+
+Elasticsearch and Kibana are optional — the core loop stores alerts in SQLite:
+
+```bash
+docker compose --profile elk up     # adds Elasticsearch :9200, Kibana :5601
+```
+
+Full walkthrough, including how to log in and generate test traffic:
+**[docs/QUICKSTART.md](docs/QUICKSTART.md)**.
+
+> The Compose stack is authored but not yet built end-to-end by the maintainer
+> (no Docker on the dev machine). The test suite, linting and the frontend
+> build are verified in CI.
+
+### Native install (Ubuntu/Kali)
+
+Cowrie and OpenCanary installed natively, driven by systemd, are documented in
+[docs/SETUP.md](docs/SETUP.md). `scripts/deploy.sh` expects Cowrie already
+present at `/home/cowrie/cowrie`.
 
 ### AWS Deployment (15 minutes)
 
@@ -115,103 +130,59 @@ aws ec2 describe-instances --region us-east-1
 | **Phase 5** | 📋 Planned | Multi-cloud and auto-rotation |
 
 ## 🏗️ Architecture
+
+```text
 ┌─────────────────────────────────────────────────────────┐
-
 │                   HONEYPOT FRAMEWORK                    │
-
 ├─────────────────────────────────────────────────────────┤
-
 │                                                         │
-
 │  LOCAL LAB (Phase 1 & 1.5)                             │
-
 │  ┌──────────────┐  ┌──────────────┐                   │
-
 │  │ Cowrie SSH   │  │ OpenCanary   │                   │
-
 │  │ (port 2222)  │  │ (5 services) │                   │
-
 │  └──────┬───────┘  └──────┬───────┘                   │
-
 │         │                 │                            │
-
 │         └────────┬────────┘                            │
-
 │                  ▼                                      │
-
 │         ┌──────────────┐                               │
-
 │         │  Log Files   │                               │
-
 │         └──────┬───────┘                               │
-
 │                ▼                                       │
-
 │  ┌────────────────────────────────┐                   │
-
 │  │      ELK STACK (Docker)        │                   │
-
 │  │  ┌──────────────────────────┐  │                   │
-
 │  │  │ Logstash (Parse Logs)    │  │                   │
-
 │  │  └──────┬───────────────────┘  │                   │
-
 │  │         ▼                       │                   │
-
 │  │  ┌──────────────────────────┐  │                   │
-
 │  │  │ Elasticsearch (Index)    │  │                   │
-
 │  │  └──────┬───────────────────┘  │                   │
-
 │  │         ▼                       │                   │
-
 │  │  ┌──────────────────────────┐  │                   │
-
 │  │  │ Kibana (Visualize)       │  │                   │
-
 │  │  └──────────────────────────┘  │                   │
-
 │  └────────────────────────────────┘                   │
-
 │                                                         │
-
 │  AWS CLOUD (Phase 2+)                                  │
-
 │  ┌──────────────────────────────────┐                 │
-
 │  │ VPC (10.0.0.0/16)               │                 │
-
 │  │  ┌────────────────────────────┐  │                 │
-
 │  │  │ EC2 Honeypots (t3.micro)  │  │                 │
-
 │  │  │ └─ Cowrie & OpenCanary    │  │                 │
-
 │  │  └────────────┬───────────────┘  │                 │
-
 │  │               ▼                   │                 │
-
 │  │  ┌────────────────────────────┐  │                 │
-
 │  │  │ CloudWatch Logs            │  │                 │
-
 │  │  └────────────┬───────────────┘  │                 │
-
 │  │               ▼                   │                 │
-
 │  │  ┌────────────────────────────┐  │                 │
-
 │  │  │ S3 (Long-term Storage)     │  │                 │
-
 │  │  └────────────────────────────┘  │                 │
-
 │  └──────────────────────────────────┘                 │
-
 │                                                         │
-
 └─────────────────────────────────────────────────────────┘
+```
+
 ## 📈 Statistics
 
 - **103+** attack events captured

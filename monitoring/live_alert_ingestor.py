@@ -14,6 +14,7 @@ import json
 import logging
 import os
 import re
+import sys
 import time
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
@@ -166,19 +167,41 @@ def ingest_honeypot_line(line: str, db_path: str = None) -> Optional[str]:
     return alert_id
 
 
-def tail_log_file(path: str, db_path: str = None, poll_seconds: float = 2.0, stop_after_lines: Optional[int] = None) -> Iterable[str]:
+def tail_log_file(
+    path: str,
+    db_path: str = None,
+    poll_seconds: float = 2.0,
+    stop_after_lines: Optional[int] = None,
+    from_start: bool = True,
+    wait_for_file: bool = False,
+) -> Iterable[str]:
     """Read a log file incrementally and yield new lines.
 
     This is deliberately lightweight so it can run as a background process in the
     framework's monitoring stack without depending on additional packages.
+
+    Args:
+        from_start: Read existing content first. Live tailing should pass
+            False, otherwise restarting the ingestor re-ingests the whole
+            log and duplicates every alert in it.
+        wait_for_file: Block until the file appears instead of giving up.
+            Needed when the ingestor starts before the honeypot has written
+            its first line (e.g. both come up together under Docker).
     """
     file_path = Path(path)
-    if not file_path.exists():
-        logger.warning("Log file not found: %s", path)
-        return []
+
+    while not file_path.exists():
+        if not wait_for_file:
+            logger.warning("Log file not found: %s", path)
+            return
+        logger.info("Waiting for log file to appear: %s", path)
+        time.sleep(poll_seconds)
 
     seen = 0
     with file_path.open("r", encoding="utf-8", errors="replace") as handle:
+        if not from_start:
+            handle.seek(0, os.SEEK_END)
+
         while True:
             line = handle.readline()
             if not line:
@@ -192,29 +215,97 @@ def tail_log_file(path: str, db_path: str = None, poll_seconds: float = 2.0, sto
                 break
 
 
-def process_log_file(path: str, db_path: str = None, poll_seconds: float = 2.0, max_lines: Optional[int] = None) -> List[str]:
+def process_log_file(
+    path: str,
+    db_path: str = None,
+    poll_seconds: float = 2.0,
+    max_lines: Optional[int] = None,
+    from_start: bool = True,
+    wait_for_file: bool = False,
+) -> List[str]:
     """Continuously ingest suspicious events from a log file."""
     created_ids: List[str] = []
-    for line in tail_log_file(path, db_path=db_path, poll_seconds=poll_seconds, stop_after_lines=max_lines):
+    for line in tail_log_file(
+        path,
+        db_path=db_path,
+        poll_seconds=poll_seconds,
+        stop_after_lines=max_lines,
+        from_start=from_start,
+        wait_for_file=wait_for_file,
+    ):
         alert_id = ingest_honeypot_line(line, db_path=db_path)
         if alert_id:
             created_ids.append(alert_id)
     return created_ids
 
 
-if __name__ == "__main__":
+DEFAULT_LOG_PATHS = (
+    "/home/cowrie/cowrie/var/log/cowrie/cowrie.log",
+    "/var/tmp/opencanary.log",
+)
+
+
+def _resolve_log_paths(argv: List[str]) -> List[str]:
+    """Log paths from argv, else $HONEYPOT_LOG_PATHS, else the defaults."""
+    if argv:
+        return argv
+
+    from_env = os.getenv("HONEYPOT_LOG_PATHS", "").strip()
+    if from_env:
+        return [p.strip() for p in from_env.replace(":", ",").split(",") if p.strip()]
+
+    return list(DEFAULT_LOG_PATHS)
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    """Tail every configured honeypot log concurrently.
+
+    Each log gets its own thread: process_log_file() blocks forever, so
+    iterating them in one loop would only ever monitor the first path.
+    """
+    import threading
+
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-    default_paths = [
-        "/home/cowrie/cowrie/var/log/cowrie/cowrie.log",
-        "/var/tmp/opencanary.log",
-    ]
-    paths = [p for p in default_paths if os.path.exists(p)]
+    paths = _resolve_log_paths(list(argv if argv is not None else sys.argv[1:]))
+    wait = os.getenv("INGESTOR_WAIT_FOR_LOGS", "true").lower() not in ("false", "0", "no")
+    # Live tailing starts at EOF so a restart doesn't replay the whole log.
+    from_start = os.getenv("INGESTOR_READ_FROM_START", "false").lower() in ("true", "1", "yes")
+    poll_seconds = float(os.getenv("INGESTOR_POLL_SECONDS", "2.0"))
+
+    if not wait:
+        paths = [p for p in paths if os.path.exists(p)]
 
     if not paths:
         logger.warning("No honeypot log files found. Nothing to monitor.")
-        raise SystemExit(0)
+        return 0
 
+    threads = []
     for path in paths:
         logger.info("Monitoring %s for suspicious activity", path)
-        process_log_file(path, db_path=None, poll_seconds=2.0)
+        thread = threading.Thread(
+            target=process_log_file,
+            args=(path,),
+            kwargs={
+                "db_path": None,
+                "poll_seconds": poll_seconds,
+                "from_start": from_start,
+                "wait_for_file": wait,
+            },
+            name=f"ingest:{os.path.basename(path)}",
+            daemon=True,
+        )
+        thread.start()
+        threads.append(thread)
+
+    try:
+        while any(t.is_alive() for t in threads):
+            time.sleep(1)
+    except KeyboardInterrupt:
+        logger.info("Shutting down ingestor")
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
