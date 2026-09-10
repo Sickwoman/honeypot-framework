@@ -5,10 +5,11 @@
 # Loads and validates environment variables from .env file
 ################################################################################
 
-import os
 import logging
+import os
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
+
 from dotenv import load_dotenv
 
 # Configure logging
@@ -128,13 +129,13 @@ class ConfigManager:
         Returns:
             Parsed value
         """
-        if expected_type == bool:
+        if expected_type is bool:
             return value.lower() in ('true', '1', 'yes', 'on')
-        elif expected_type == int:
+        elif expected_type is int:
             return int(value)
-        elif expected_type == float:
+        elif expected_type is float:
             return float(value)
-        elif expected_type == list:
+        elif expected_type is list:
             return [v.strip() for v in value.split(',')]
         else:
             return value
@@ -260,7 +261,7 @@ class ConfigManager:
             logger.info(f"Log directories created: {log_dir}")
             return True
         except Exception as e:
-            raise ConfigurationError(f"Failed to create log directories: {e}")
+            raise ConfigurationError(f"Failed to create log directories: {e}") from e
     
     def ensure_database_directories(self) -> bool:
         """
@@ -279,7 +280,7 @@ class ConfigManager:
             logger.info(f"Database directories created: {db_dir}")
             return True
         except Exception as e:
-            raise ConfigurationError(f"Failed to create database directories: {e}")
+            raise ConfigurationError(f"Failed to create database directories: {e}") from e
     
     def validate_production(self) -> bool:
         """
@@ -289,12 +290,12 @@ class ConfigManager:
             True if configuration is production-ready
         """
         checks = [
-            ("DEBUG must be False", self.get("DEBUG") == False),
+            ("DEBUG must be False", not self.get("DEBUG")),
             ("API_WORKERS must be >= 2", self.get("API_WORKERS") >= 2),
             ("JWT_SECRET_KEY must be custom", 
              self.get("JWT_SECRET_KEY") and "change_me" not in self.get("JWT_SECRET_KEY", "").lower()),
             ("SESSION_LIFETIME must be set", self.get("SESSION_LIFETIME") > 0),
-            ("ELASTICSEARCH_SSL must be True", self.get("ELASTICSEARCH_SSL") == True),
+            ("ELASTICSEARCH_SSL must be True", bool(self.get("ELASTICSEARCH_SSL"))),
             ("LOG_RETENTION_DAYS must be >= 30", self.get("LOG_RETENTION_DAYS") >= 30),
         ]
         

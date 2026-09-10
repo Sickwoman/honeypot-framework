@@ -5,18 +5,17 @@
 # Detect unusual attack patterns using Isolation Forest & DBSCAN clustering
 ################################################################################
 
-import requests
-import numpy as np
-import pandas as pd
-from sklearn.ensemble import IsolationForest
-from sklearn.preprocessing import StandardScaler
-from sklearn.cluster import DBSCAN
 import json
 import pickle
 from datetime import datetime
-import os
 
 import es_client
+import pandas as pd
+import requests
+from sklearn.cluster import DBSCAN
+from sklearn.ensemble import IsolationForest
+from sklearn.preprocessing import StandardScaler
+
 
 class AnomalyDetector:
     def __init__(self, es_url=None, username=None, password=None):
@@ -159,7 +158,7 @@ class AnomalyDetector:
         
         classifications = []
         
-        for idx, row in df.iterrows():
+        for _idx, row in df.iterrows():
             attack_type = "Unknown"
             
             if row['attack_count'] > 100 and row['services_targeted'] == 1:
@@ -225,12 +224,12 @@ class AnomalyDetector:
         
         if len(anomalies) > 0:
             print("  Top Anomalous IPs:")
-            for idx, row in anomalies.head(5).iterrows():
+            for _idx, row in anomalies.head(5).iterrows():
                 print(f"    • {row['src_ip']} - Score: {row['anomaly_score']:.2f}")
         
         print("\n🏆 TOP RISK IPS:")
         top_risk = classifications.nlargest(10, 'risk_score')
-        for idx, row in top_risk.iterrows():
+        for _idx, row in top_risk.iterrows():
             print(f"  • {row['ip']} ({row['type']}) - Risk: {row['risk_score']:.1f}")
         
         print("\n📈 ATTACK TYPE DISTRIBUTION:")
@@ -269,7 +268,7 @@ class AnomalyDetector:
             index=False
         )
         
-        print(f"✅ Classifications exported to CSV")
+        print("✅ Classifications exported to CSV")
 
 def main():
     import sys

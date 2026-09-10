@@ -5,15 +5,15 @@
 # Real-time monitoring of Elasticsearch and Logstash performance
 ################################################################################
 
-import requests
-import json
-import time
-from datetime import datetime
-from collections import deque
 import os
 import sys
+import time
+from collections import deque
+from datetime import datetime
 
 import es_client
+import requests
+
 
 class PerformanceMonitor:
     def __init__(self, es_url=None, username=None, password=None):
@@ -71,7 +71,7 @@ class PerformanceMonitor:
                 verify=self.verify_ssl
             )
             return response.json()['count']
-        except Exception as e:
+        except Exception:
             return 0
     
     def calculate_metrics(self):
@@ -99,7 +99,7 @@ class PerformanceMonitor:
         
         # Get heap info from first node
         if 'nodes' in nodes:
-            for node_id, node_data in nodes['nodes'].items():
+            for _node_id, node_data in nodes['nodes'].items():
                 if 'jvm' in node_data:
                     metrics['heap_used_percent'] = node_data['jvm']['mem']['heap_used_percent']
                     metrics['heap_max_bytes'] = node_data['jvm']['mem']['heap_max_in_bytes']
@@ -131,7 +131,7 @@ class PerformanceMonitor:
             'red': '\033[91m'      # Red
         }.get(metrics['cluster_status'], '\033[0m')
         
-        print(f"\033[92m📊 CLUSTER HEALTH\033[0m")
+        print("\033[92m📊 CLUSTER HEALTH\033[0m")
         print(f"  Status: {status_color}{metrics['cluster_status'].upper()}\033[0m")
         print(f"  Active Shards: {metrics['active_shards']}")
         print(f"  Unassigned Shards: {metrics['unassigned_shards']}")
@@ -141,20 +141,20 @@ class PerformanceMonitor:
         heap_percent = metrics['heap_used_percent']
         heap_color = '\033[92m' if heap_percent < 70 else '\033[93m' if heap_percent < 85 else '\033[91m'
         
-        print(f"\033[92m💾 MEMORY USAGE\033[0m")
+        print("\033[92m💾 MEMORY USAGE\033[0m")
         print(f"  Heap Used: {heap_color}{heap_percent}%\033[0m")
         print(f"  Max Heap: {metrics['heap_max_bytes'] / (1024**3):.2f}GB")
         print()
         
         # Data Statistics
         docs_gb = metrics['store_size_bytes'] / (1024**3)
-        print(f"\033[92m📈 DATA STATISTICS\033[0m")
+        print("\033[92m📈 DATA STATISTICS\033[0m")
         print(f"  Total Documents: {metrics['docs_count']:,}")
         print(f"  Storage Size: {docs_gb:.2f}GB")
         print()
         
         # Performance Metrics
-        print(f"\033[92m⚡ PERFORMANCE\033[0m")
+        print("\033[92m⚡ PERFORMANCE\033[0m")
         print(f"  Search Time (total): {metrics['search_time_ms']:,}ms")
         print(f"  Indexing Time (total): {metrics['indexing_time_ms']:,}ms")
         
@@ -169,7 +169,7 @@ class PerformanceMonitor:
         print()
         
         # Recommendations
-        print(f"\033[92m💡 RECOMMENDATIONS\033[0m")
+        print("\033[92m💡 RECOMMENDATIONS\033[0m")
         recommendations = []
         
         if heap_percent > 85:
@@ -189,7 +189,7 @@ class PerformanceMonitor:
         
         print()
         print(f"\033[94m{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\033[0m")
-        print(f"\033[94m(Press Ctrl+C to stop)\033[0m")
+        print("\033[94m(Press Ctrl+C to stop)\033[0m")
 
 def main():
     monitor = PerformanceMonitor()

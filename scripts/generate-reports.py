@@ -5,16 +5,17 @@
 # Generates daily/weekly/monthly attack reports
 ################################################################################
 
-import requests
 import json
-from datetime import datetime, timedelta
-from jinja2 import Template
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 import os
+import smtplib
+from datetime import datetime
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 import es_client
+import requests
+from jinja2 import Template
+
 
 class ReportGenerator:
     def __init__(self, es_url=None, username=None, password=None):

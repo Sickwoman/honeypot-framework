@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 
 from analytics.attack_story import build_story
-from analytics.correlation_engine import Alert, AttackCampaign, DEFAULT_CONFIG
+from analytics.correlation_engine import DEFAULT_CONFIG, Alert, AttackCampaign
 
 
 def test_build_story_preserves_timeline_and_evidence():

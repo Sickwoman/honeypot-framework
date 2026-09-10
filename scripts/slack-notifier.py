@@ -5,11 +5,12 @@
 # Sends honeypot alerts and reports to Slack
 ################################################################################
 
-import requests
-import json
-import sys
 import argparse
+import sys
 from datetime import datetime
+
+import requests
+
 
 class SlackNotifier:
     def __init__(self, webhook_url=None):
@@ -101,7 +102,7 @@ class SlackNotifier:
                 {
                     'fallback': f'High Risk IP Detected: {ip}',
                     'color': '#ff0000',
-                    'title': f'🔴 HIGH RISK IP DETECTED',
+                    'title': '🔴 HIGH RISK IP DETECTED',
                     'fields': [
                         {
                             'title': 'IP Address',

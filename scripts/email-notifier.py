@@ -5,14 +5,14 @@
 # Sends honeypot alerts and reports via email
 ################################################################################
 
-import smtplib
-import json
-import sys
 import argparse
-from datetime import datetime
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 import os
+import smtplib
+import sys
+from datetime import datetime
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+
 
 class EmailNotifier:
     def __init__(self, smtp_server=None, smtp_port=587, sender=None, password=None):

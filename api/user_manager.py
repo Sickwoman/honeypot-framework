@@ -9,11 +9,11 @@
 # AlertService, and the same schema bootstrap.
 ################################################################################
 
-import os
-import uuid
 import logging
+import os
 import secrets
 import sqlite3
+import uuid
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
@@ -104,7 +104,7 @@ class UserManager:
                 )
                 conn.commit()
         except sqlite3.IntegrityError as e:
-            raise UserError(f"user already exists: {e}")
+            raise UserError(f"user already exists: {e}") from e
 
         return user_id
 

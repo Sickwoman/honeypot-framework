@@ -5,18 +5,19 @@
 # Implements various response actions (block, notify, isolate, etc.)
 ################################################################################
 
-import os
-import json
 import ipaddress
-import subprocess
+import json
 import logging
-from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, Tuple
-from datetime import datetime, timedelta
-import requests
+import os
 import smtplib
-from email.mime.text import MIMEText
+import subprocess
+from abc import ABC, abstractmethod
+from datetime import datetime, timedelta
 from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from typing import Any, Dict, Optional, Tuple
+
+import requests
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -358,7 +359,7 @@ class CreateIncidentHandler(ActionHandler):
                 return True, {
                     'action': 'create_incident',
                     'incident': incident_data,
-                    'message': f'[DRY RUN] Would create incident'
+                    'message': '[DRY RUN] Would create incident'
                 }
             
             # TODO: Insert into database
@@ -481,7 +482,7 @@ class RunScriptHandler(ActionHandler):
                 'stdout': result.stdout,
                 'stderr': result.stderr,
                 'return_code': result.returncode,
-                'message': f'Script executed successfully'
+                'message': 'Script executed successfully'
             }
         
         except subprocess.TimeoutExpired:

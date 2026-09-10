@@ -1,7 +1,6 @@
 import importlib.util
 from pathlib import Path
 
-
 MODULE_PATH = Path(__file__).parents[1] / "scripts" / "deception-sentinel.py"
 SPEC = importlib.util.spec_from_file_location("deception_sentinel", MODULE_PATH)
 sentinel = importlib.util.module_from_spec(SPEC)

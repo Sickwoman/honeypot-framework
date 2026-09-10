@@ -8,6 +8,7 @@
 import json
 from datetime import datetime
 
+
 class AWSCostEstimator:
     def __init__(self):
         self.costs = {}
@@ -109,7 +110,6 @@ class AWSCostEstimator:
         
         for service, details in self.costs.items():
             service_name = service.upper()
-            cost = details['cost']
             status = details['status']
             config = details['details']
             
@@ -127,7 +127,7 @@ class AWSCostEstimator:
         print(f"  • EC2: {self.free_tier_limits['ec2_hours']} hours/month (t3.micro)")
         print(f"  • CloudWatch: {self.free_tier_limits['cloudwatch_logs_gb']} GB logs/month")
         print(f"  • S3: {self.free_tier_limits['s3_storage_gb']} GB storage + {self.free_tier_limits['s3_transfer_out_gb']} GB transfer")
-        print(f"  • Credits: $100 USD (185 days remaining)")
+        print("  • Credits: $100 USD (185 days remaining)")
         
         print("\n💡 RECOMMENDATIONS:\n")
         

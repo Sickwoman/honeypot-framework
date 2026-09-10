@@ -17,7 +17,7 @@ from flask import Flask, jsonify
 
 from api.auth import APIKeyManager, AuthenticationError
 from api.middleware import rate_limit
-from api.user_manager import UserManager, MAX_FAILED_LOGIN_ATTEMPTS
+from api.user_manager import MAX_FAILED_LOGIN_ATTEMPTS, UserManager
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 

@@ -5,14 +5,14 @@
 # Rate limiting, request logging, and security headers
 ################################################################################
 
+import logging
 import os
 import time
-import logging
-from datetime import datetime, timedelta
-from functools import wraps
-from typing import Dict
 from collections import defaultdict
-from flask import request, jsonify, g
+from datetime import datetime
+from functools import wraps
+
+from flask import g, jsonify, request
 
 # Configure logging
 _LOG_DIR = os.getenv('LOG_DIR', '/var/log/honeypot')
@@ -212,8 +212,8 @@ class AuditLogger:
         audit_logger.info(audit_entry)
 
         try:
-            import sqlite3
             import json
+            import sqlite3
             conn = sqlite3.connect(self._get_db_path())
             try:
                 conn.execute(
@@ -281,16 +281,9 @@ def rate_limit(max_requests: int = None, window_seconds: int = None):
                     "retry_after": window_seconds or 3600
                 }), 429
             
-            # Add rate limit headers
-            remaining = limiter.get_remaining(client_id)
-            response = f(*args, **kwargs)
-            if isinstance(response, tuple):
-                response, status_code = response
-                # Add headers
-                if isinstance(response, dict):
-                    pass  # Can't add headers to dict
-            
-            return response
+            # X-RateLimit-* headers are added centrally in setup_middleware()'s
+            # after_request hook, which has the real response object.
+            return f(*args, **kwargs)
         
         return decorated_function
     return decorator
@@ -305,12 +298,8 @@ def log_request_response(f):
         try:
             response = f(*args, **kwargs)
             
-            # Extract response details
-            if isinstance(response, tuple):
-                data, status_code = response
-            else:
-                data = response
-                status_code = 200
+            # Extract the status code; the body itself isn't logged.
+            status_code = response[1] if isinstance(response, tuple) else 200
             
             # Log request
             duration = time.time() - start_time

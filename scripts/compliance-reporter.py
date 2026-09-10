@@ -5,26 +5,30 @@
 # Generates SOC2, PCI-DSS, HIPAA compliance reports from honeypot logs
 ################################################################################
 
-import requests
-import json
 import csv
-import os
-from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional
-from dataclasses import dataclass, asdict
-from enum import Enum
-import hashlib
+import json
 import logging
+from dataclasses import asdict, dataclass
+from datetime import datetime
+from enum import Enum
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 import es_client
+import requests
 
 try:
-    from reportlab.lib.pagesizes import letter, A4
     from reportlab.lib import colors
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.units import inch
+    from reportlab.platypus import (
+        Paragraph,
+        SimpleDocTemplate,
+        Spacer,
+        Table,
+        TableStyle,
+    )
     HAS_REPORTLAB = True
 except ImportError:
     HAS_REPORTLAB = False

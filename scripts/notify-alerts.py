@@ -5,14 +5,14 @@
 # Send alerts to Slack, Discord, Email, and custom webhooks
 ################################################################################
 
-import requests
-import json
-import os
 import html
+import os
 from datetime import datetime
 from enum import Enum
 
 import es_client
+import requests
+
 
 class AlertLevel(Enum):
     INFO = "info"
@@ -109,8 +109,8 @@ class AlertNotifier:
         
         try:
             import smtplib
-            from email.mime.text import MIMEText
             from email.mime.multipart import MIMEMultipart
+            from email.mime.text import MIMEText
             
             sender = os.getenv('ALERT_EMAIL_FROM', 'honeypot@example.com')
             password = os.getenv('ALERT_EMAIL_PASSWORD', '')

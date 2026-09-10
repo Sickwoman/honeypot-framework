@@ -13,14 +13,14 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from analytics.correlation_engine import (
-    CorrelationEngine,
-    DEFAULT_CONFIG,
-    load_config,
-    _parse_ts,
-    _parse_indicators,
-)
 from analytics.attack_graph import AttackGraph
+from analytics.correlation_engine import (
+    DEFAULT_CONFIG,
+    CorrelationEngine,
+    _parse_indicators,
+    _parse_ts,
+    load_config,
+)
 
 
 # --------------------------------------------------------------------------- #

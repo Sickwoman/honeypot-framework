@@ -8,7 +8,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional
 
-from analytics.correlation_engine import Alert, AttackCampaign, CorrelationEngine, DEFAULT_CONFIG
+from analytics.correlation_engine import DEFAULT_CONFIG, Alert, AttackCampaign, CorrelationEngine
 
 
 @dataclass

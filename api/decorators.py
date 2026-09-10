@@ -11,10 +11,10 @@ from functools import wraps
 from flask import g, jsonify
 
 from api.auth import (
-    resolve_request_identity,
     AuthenticationError,
     # Re-exported so callers can import all guards from one place.
     login_required,
+    resolve_request_identity,
 )
 from api.rbac import has_permission
 

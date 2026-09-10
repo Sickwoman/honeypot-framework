@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 import json
-import os
-from datetime import datetime
-from collections import defaultdict
 import subprocess
+from collections import defaultdict
+
 
 def read_cowrie_logs():
     """Read Cowrie logs with sudo"""
@@ -17,7 +16,7 @@ def read_cowrie_logs():
         for line in result.stdout.split('\n'):
             if line.strip():
                 logs.append(line)
-    except:
+    except (OSError, subprocess.SubprocessError):
         pass
     return logs
 
@@ -29,9 +28,9 @@ def read_opencanary_logs():
             for line in f:
                 try:
                     logs.append(json.loads(line))
-                except:
+                except json.JSONDecodeError:
                     pass
-    except:
+    except OSError:
         pass
     return logs
 
@@ -50,16 +49,16 @@ def display_dashboard():
     print("-" * 80)
     print(f"   Total log lines: {len(cowrie_logs)}")
     
-    ssh_connections = [l for l in cowrie_logs if 'New connection' in l]
-    ssh_auths = [l for l in cowrie_logs if 'trying auth' in l]
-    ssh_commands = [l for l in cowrie_logs if 'CMD:' in l]
+    ssh_connections = [line for line in cowrie_logs if 'New connection' in line]
+    ssh_auths = [line for line in cowrie_logs if 'trying auth' in line]
+    ssh_commands = [line for line in cowrie_logs if 'CMD:' in line]
     
     print(f"   SSH connections: {len(ssh_connections)}")
     print(f"   Authentication attempts: {len(ssh_auths)}")
     print(f"   Commands executed: {len(ssh_commands)}")
     
     if ssh_commands:
-        print(f"\n   Last 5 commands executed:")
+        print("\n   Last 5 commands executed:")
         for cmd in ssh_commands[-5:]:
             # Extract command from log
             parts = cmd.split('CMD:')
@@ -87,16 +86,16 @@ def display_dashboard():
         if log.get('logtype') == 3003:
             http_requests.append(log)
     
-    print(f"   Active services:")
+    print("   Active services:")
     port_names = {21: 'FTP', 80: 'HTTP', 443: 'HTTPS', 3306: 'MySQL', 2223: 'SSH', 23: 'Telnet', 445: 'SMB'}
     for port in sorted(ports.keys()):
-        name = port_names.get(port, f'Unknown')
+        name = port_names.get(port, 'Unknown')
         count = ports[port]
         print(f"      • {name:12} (port {port:5}): {count:3} attempts")
     
     if logins:
         print(f"\n   Credentials captured: {len(logins)}")
-        print(f"   Sample logins:")
+        print("   Sample logins:")
         for login in logins[-5:]:
             user = login.get('USERNAME', '?')
             pwd = login.get('PASSWORD', '?')
@@ -114,9 +113,9 @@ def display_dashboard():
     print("-" * 80)
     total_events = len(cowrie_logs) + len(opencanary_logs)
     print(f"   Total events captured: {total_events}")
-    print(f"   Honeypots active: 2 (Cowrie + OpenCanary)")
-    print(f"   Ports monitored: 11 (2222, 21, 80, 443, 3306, 2223, 23, 445, 1433, 5432, 6379)")
-    print(f"   Status: ✅ OPERATIONAL")
+    print("   Honeypots active: 2 (Cowrie + OpenCanary)")
+    print("   Ports monitored: 11 (2222, 21, 80, 443, 3306, 2223, 23, 445, 1433, 5432, 6379)")
+    print("   Status: ✅ OPERATIONAL")
     
     print("\n" + "="*80)
     print(" Next Step: Deploy to AWS Phase 2 ".center(80))

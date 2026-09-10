@@ -5,15 +5,14 @@
 # Classify attacks and assign risk scores
 ################################################################################
 
-import requests
 import json
-import numpy as np
-import pandas as pd
 from datetime import datetime
-from sklearn.preprocessing import MinMaxScaler
-import os
 
 import es_client
+import pandas as pd
+import requests
+from sklearn.preprocessing import MinMaxScaler
+
 
 class ThreatClassifier:
     def __init__(self, es_url=None, username=None, password=None):
@@ -230,7 +229,7 @@ class ThreatClassifier:
         print(f"{'IP Address':<20} {'Type':<25} {'Score':<8} {'Level':<10} {'Attacks':<8}")
         print("-" * 80)
         
-        for idx, row in df.head(10).iterrows():
+        for _idx, row in df.head(10).iterrows():
             print(f"{row['src_ip']:<20} {row['attack_type']:<25} "
                   f"{row['threat_score']:<8.1f} {row['threat_level']:<10} "
                   f"{row['total_attacks']:<8}")
@@ -243,12 +242,12 @@ class ThreatClassifier:
         print("\n🔴 CRITICAL THREATS REQUIRING IMMEDIATE ACTION:")
         critical = df[df['threat_level'] == "CRITICAL"]
         if len(critical) > 0:
-            for idx, row in critical.iterrows():
+            for _idx, row in critical.iterrows():
                 print(f"\n  IP: {row['src_ip']}")
                 print(f"  Type: {row['attack_type']}")
                 print(f"  Risk Score: {row['threat_score']:.1f}/100")
                 print(f"  Attacks: {row['total_attacks']}")
-                print(f"  Recommendations:")
+                print("  Recommendations:")
                 for rec in self.get_recommendations(row['attack_type'], row['threat_level']):
                     print(f"    ✓ {rec}")
         else:
@@ -289,7 +288,7 @@ class ThreatClassifier:
             index=False
         )
         
-        print(f"✅ Threat scores exported to CSV")
+        print("✅ Threat scores exported to CSV")
 
 def main():
     import sys

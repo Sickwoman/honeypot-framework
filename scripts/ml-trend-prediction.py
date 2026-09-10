@@ -5,17 +5,20 @@
 # Predict future attack patterns and trends
 ################################################################################
 
-import requests
 import json
+import warnings
+from datetime import datetime, timedelta
+
 import numpy as np
 import pandas as pd
-from datetime import datetime, timedelta
+import requests
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import PolynomialFeatures
-import warnings
+
 warnings.filterwarnings('ignore')
 
 import es_client
+
 
 class TrendPredictor:
     def __init__(self, es_url=None, username=None, password=None):
@@ -128,7 +131,7 @@ class TrendPredictor:
         top_days = df.nlargest(3, 'count')
         
         predictions = []
-        for idx, row in top_days.iterrows():
+        for _idx, row in top_days.iterrows():
             day_of_week = pd.to_datetime(row['timestamp']).day_name()
             predictions.append({
                 'date': row['timestamp'],
@@ -190,7 +193,7 @@ class TrendPredictor:
         surges = self.detect_attack_surge(df)
         if len(surges) > 0:
             print(f"\n⚠️  ATTACK SURGES DETECTED ({len(surges)} days):")
-            for idx, row in surges.iterrows():
+            for _idx, row in surges.iterrows():
                 print(f"  • {row['timestamp']}: {row['count']:.0f} attacks")
         else:
             print("\n✅ No unusual attack surges detected")

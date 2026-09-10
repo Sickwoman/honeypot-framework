@@ -5,11 +5,12 @@
 # Sends honeypot alerts and reports to Discord
 ################################################################################
 
-import requests
-import json
-import sys
 import argparse
+import sys
 from datetime import datetime
+
+import requests
+
 
 class DiscordNotifier:
     def __init__(self, webhook_url=None):
@@ -125,7 +126,7 @@ class DiscordNotifier:
         
         return self.send_embed(
             '🔴 HIGH RISK IP DETECTED',
-            f'Malicious IP activity detected',
+            'Malicious IP activity detected',
             color=15158332,
             fields=fields
         )

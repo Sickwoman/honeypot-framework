@@ -5,9 +5,10 @@
 # Exports honeypot metrics for Prometheus scraping
 ################################################################################
 
-from prometheus_client import start_http_server, Counter, Gauge, Histogram
-import time
 import sys
+import time
+
+from prometheus_client import Counter, Gauge, Histogram, start_http_server
 
 # Create metrics
 honeypot_events = Counter(
@@ -57,6 +58,7 @@ response_time = Histogram(
 )
 
 import es_client
+
 
 class MetricsCollector:
     def __init__(self, es_host=None, username=None, password=None):

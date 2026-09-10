@@ -5,11 +5,12 @@
 # Real-time ML insights and visualizations
 ################################################################################
 
-import os
-import sys
 import json
-from datetime import datetime
+import os
 import subprocess
+import sys
+from datetime import datetime
+
 
 class MLDashboard:
     def __init__(self):

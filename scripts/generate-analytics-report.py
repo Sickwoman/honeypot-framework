@@ -5,12 +5,12 @@
 # Generates comprehensive attack analysis and statistics
 ################################################################################
 
-import json
-import requests
-from datetime import datetime, timedelta
 import argparse
+import json
+from datetime import datetime
 
 import es_client
+
 
 class AnalyticsReportGenerator:
     def __init__(self, es_host=None, username=None, password=None):
@@ -204,13 +204,13 @@ class AnalyticsReportGenerator:
                 size=0
             )
             return response['hits']['total']['value']
-        except Exception as e:
+        except Exception:
             return 0
     
     def generate_text_report(self, days=1):
         """Generate formatted text report"""
         print("\n" + "="*70)
-        print(f" 📊 HONEYPOT ANALYTICS REPORT".center(70))
+        print(" 📊 HONEYPOT ANALYTICS REPORT".center(70))
         print(f" {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}".center(70))
         print("="*70)
         
@@ -225,13 +225,13 @@ class AnalyticsReportGenerator:
         print(f"  Credentials Captured: {creds}")
         
         # Top IPs
-        print(f"\n🔴 TOP 10 ATTACKING IPs:")
+        print("\n🔴 TOP 10 ATTACKING IPs:")
         top_ips = self.get_top_ips(10, days)
         for i, ip_data in enumerate(top_ips, 1):
             print(f"  {i:2d}. {ip_data['ip']:15s} - {ip_data['count']:5d} events")
         
         # Service distribution
-        print(f"\n🔧 ATTACKS BY SERVICE:")
+        print("\n🔧 ATTACKS BY SERVICE:")
         services = self.get_service_distribution(days)
         for service, count in sorted(services.items(), key=lambda x: x[1], reverse=True):
             percentage = (count / total * 100) if total > 0 else 0
@@ -239,7 +239,7 @@ class AnalyticsReportGenerator:
             print(f"  {service:15s} {count:5d} ({percentage:5.1f}%) {bar}")
         
         # Threat intelligence
-        print(f"\n⚠️  THREAT INTELLIGENCE:")
+        print("\n⚠️  THREAT INTELLIGENCE:")
         threat_stats = self.get_threat_intelligence_stats(days)
         if threat_stats.get('threat_levels'):
             for level, count in threat_stats['threat_levels'].items():
