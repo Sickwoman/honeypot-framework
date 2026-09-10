@@ -21,7 +21,7 @@ A **cloud-native honeypot deployment framework** for capturing, analyzing, and v
 - **Logstash Pipeline** — Real-time event parsing and enrichment
 
 ### ☁️ Cloud Infrastructure
-- **Terraform IaC** — Production-ready infrastructure as code
+- **Terraform IaC** — Modular infrastructure as code (validated in CI)
 - **Multi-Region** — Deploy to AWS us-east-1, eu-west-1, ap-south-1
 - **Automated Deployment** — One command to deploy entire stack
 
@@ -223,14 +223,25 @@ aws ec2 describe-instances --region us-east-1
 
 ## 🔒 Security Features
 
+Implemented:
+
 ✅ Least-privilege IAM policies
-✅ VPC network isolation  
+✅ VPC network isolation
 ✅ Security groups with port restrictions
 ✅ Systemd service sandboxing
-✅ Log encryption (S3)
 ✅ .gitignore blocking secrets
-✅ CloudWatch retention policies
 ✅ Non-root service execution
+✅ RBAC with bcrypt-hashed accounts, JWT/API-key auth, and login lockout
+✅ Persisted audit trail (`audit_log` table)
+✅ Duration-bounded automated firewall blocks (expiry job in cron)
+
+Not yet complete — see [SECURITY-CHECKLIST.md](SECURITY-CHECKLIST.md) and
+[IMPROVEMENTS-AND-FEATURES.md](IMPROVEMENTS-AND-FEATURES.md):
+
+⬜ End-to-end TLS across every component
+⬜ Log encryption at rest (S3 SSE + CloudWatch retention policies)
+⬜ MFA for operator accounts
+⬜ Independent penetration test
 
 ## 💰 Cost Estimation
 
@@ -266,7 +277,9 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file for
 
 ---
 
-**Status**: Production-ready for AWS deployment
-**Last Updated**: June 16, 2026
+**Status**: Working lab/portfolio deployment. Terraform, honeypots, alerting
+and the RBAC API run end to end; the hardening items listed under Security
+Features remain open, so treat this as pre-production.
+**Last Updated**: September 10, 2026
 **Maintainer**: Security Team
 

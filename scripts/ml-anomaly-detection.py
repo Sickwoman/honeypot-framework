@@ -2,7 +2,7 @@
 
 ################################################################################
 # Machine Learning - Anomaly Detection
-# Detect unusual attack patterns using Isolation Forest & Autoencoders
+# Detect unusual attack patterns using Isolation Forest & DBSCAN clustering
 ################################################################################
 
 import requests
@@ -16,13 +16,14 @@ import pickle
 from datetime import datetime
 import os
 
+import es_client
+
 class AnomalyDetector:
-    def __init__(self, es_url="https://localhost:9200",
-                 username="elastic", password="changeme"):
-        self.es_url = es_url
-        self.username = username
-        self.password = password
-        self.verify_ssl = False
+    def __init__(self, es_url=None, username=None, password=None):
+        self.es_url = es_url or es_client.url()
+        self.username = username or es_client.username()
+        self.password = password or es_client.password()
+        self.verify_ssl = es_client.verify()
         self.scaler = StandardScaler()
         self.model = None
         self.model_path = "/tmp/anomaly_model.pkl"

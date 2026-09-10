@@ -385,20 +385,17 @@ ls -la /archive/incidents/ | tail -10
 
 ## Compliance Status
 
-| Requirement | Status | Evidence | Review Date |
-|-------------|--------|----------|-------------|
-| 1           | ✓ Pass | Firewall rules documented | 2024-09-01 |
-| 2           | ✓ Pass | Default credentials changed | 2024-09-01 |
-| 3           | ✓ Pass | Data minimization verified | 2024-09-01 |
-| 4           | ✓ Pass | TLS 1.2+ configured | 2024-09-01 |
-| 5           | ⚠ WIP  | Antivirus deployment in progress | 2024-09-01 |
-| 6           | ✓ Pass | Change management implemented | 2024-09-01 |
-| 7           | ✓ Pass | Access control policies | 2024-09-01 |
-| 8           | ✓ Pass | MFA on privileged accounts | 2024-09-01 |
-| 9           | ✓ Pass | Physical/cloud security | 2024-09-01 |
-| 10          | ✓ Pass | Comprehensive logging | 2024-09-01 |
-| 11          | ✓ Pass | Regular testing schedule | 2024-09-01 |
-| 12          | ✓ Pass | Incident response plan | 2024-09-01 |
+> **This project has not been audited.** Nothing below is an attestation of
+> compliance. These documents map the framework's controls onto the
+> PCI-DSS control vocabulary as a self-assessment exercise -- useful as a
+> checklist and for learning how the controls map to real infrastructure, but
+> a genuine PCI-DSS position requires an independent assessor, organizational
+> policies and evidence retention that live outside this repository.
+>
+> Run `python3 scripts/compliance-reporter.py --standard PCI-DSS` to collect
+> the evidence this repo *can* produce (log coverage, access-control config,
+> retention settings), then judge each control yourself against the checklist
+> above.
 
 ## Automated Compliance Verification
 

@@ -30,6 +30,16 @@ class ConfigManager:
         "JWT_ALGORITHM": "HS256",
         "TOKEN_EXPIRATION_HOURS": 24,
         "SESSION_LIFETIME": 86400,
+        "JWT_SECRET_KEY": "",
+
+        # SSL/TLS certificate paths
+        "SSL_CA_CERT_PATH": "",
+        "SSL_ELASTICSEARCH_CERT_PATH": "",
+        "SSL_ELASTICSEARCH_KEY_PATH": "",
+        "SSL_KIBANA_CERT_PATH": "",
+        "SSL_KIBANA_KEY_PATH": "",
+        "SSL_API_CERT_PATH": "",
+        "SSL_API_KEY_PATH": "",
         
         # API Server
         "API_HOST": "0.0.0.0",
@@ -343,13 +353,20 @@ def init_config(env_file: str = ".env") -> ConfigManager:
 def get_config() -> ConfigManager:
     """
     Get global configuration instance
-    
+
     Returns:
         ConfigManager instance
+
+    Raises:
+        ConfigurationError: If init_config() has not been called yet.
+        Auto-initializing here would silently paper over a missing or
+        misconfigured .env for whichever module imported first.
     """
     global config
     if config is None:
-        config = ConfigManager()
+        raise ConfigurationError(
+            "Configuration not initialized -- call init_config() before get_config()."
+        )
     return config
 
 

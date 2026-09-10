@@ -55,10 +55,12 @@ cat > "$CONFIG_DIR/compliance-config.yml" << 'EOF'
 # Compliance Configuration
 
 elasticsearch:
-  url: "https://localhost:9200"
-  username: "elastic"
-  password: "changeme"
-  verify_ssl: false
+  # Credentials come from the environment (ELASTICSEARCH_USERNAME /
+  # ELASTICSEARCH_PASSWORD) -- never store a password in this file.
+  url: "${ELASTICSEARCH_URL:-https://localhost:9200}"
+  username: "${ELASTICSEARCH_USERNAME:-elastic}"
+  password: "${ELASTICSEARCH_PASSWORD}"
+  verify_ssl: true
   timeout: 30
 
 compliance_standards:
@@ -185,7 +187,7 @@ echo ""
 
 # Check Elasticsearch connectivity
 echo "📊 Elasticsearch Status:"
-if curl -s -u elastic:changeme https://localhost:9200/_cluster/health 2>/dev/null | grep -q '"status"'; then
+if curl -s -u "elastic:$ELASTICSEARCH_PASSWORD" https://localhost:9200/_cluster/health 2>/dev/null | grep -q '"status"'; then
     echo "  ✓ Connected"
 else
     echo "  ✗ Not connected"
@@ -295,7 +297,7 @@ Edit `config/compliance-config.yml` to customize:
 
 ```bash
 # Test Elasticsearch connection
-curl -u elastic:changeme https://localhost:9200/_cluster/health
+curl -u "elastic:$ELASTICSEARCH_PASSWORD" https://localhost:9200/_cluster/health
 
 # View recent reports
 ls -ltr compliance_reports/SOC2/*/
@@ -342,7 +344,7 @@ echo "4. Monitor compliance status:"
 echo "   - bash scripts/compliance-monitor.sh"
 echo ""
 echo "5. Verify Elasticsearch connectivity:"
-echo "   - curl -u elastic:changeme https://localhost:9200/_cluster/health"
+echo '   - curl -u "elastic:$ELASTICSEARCH_PASSWORD" https://localhost:9200/_cluster/health'
 echo ""
 echo "✅ Automated daily reports scheduled for 2:00 AM"
 echo ""

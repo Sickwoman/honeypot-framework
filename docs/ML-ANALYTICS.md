@@ -213,18 +213,26 @@ python3 scripts/ml-anomaly-detection.py train
 
 ## 8. Performance Metrics
 
-### Anomaly Detection
-- **Precision**: ~85% (minimal false positives)
-- **Recall**: ~90% (catches most anomalies)
-- **F1-Score**: 0.87
+> **Not yet measured.** The models here are unsupervised (Isolation Forest,
+> DBSCAN) and run against unlabeled honeypot traffic, so there is no ground
+> truth in this repository to score them against and no evaluation code in
+> `scripts/ml-anomaly-detection.py`. Any precision/recall/F1 numbers would be
+> invented.
 
-### Threat Classification
-- **Accuracy**: ~92% (correct categorization)
-- **Coverage**: All 6 attack types
+To produce real numbers you would need to:
 
-### Trend Prediction
-- **MAPE**: ~12% (mean absolute percentage error)
-- **Forecast Horizon**: 7 days
+1. Label a sample of historical honeypot events (attack type / anomalous or
+   benign) — this is the expensive part.
+2. Hold that labeled set out of training.
+3. Add an evaluation step that scores predictions against those labels
+   (`sklearn.metrics.classification_report`) and record the results here with
+   the date and dataset size.
+
+### Configured parameters (not results)
+- **Anomaly detection**: Isolation Forest, `contamination` set at
+  detector construction; DBSCAN for cluster-based grouping
+- **Threat classification**: rule/score-based over 6 attack types
+- **Trend prediction**: linear/polynomial regression, 7-day forecast horizon
 
 ---
 
@@ -277,5 +285,6 @@ python3 scripts/ml-anomaly-detection.py train
 
 **Last Updated**: June 30, 2026
 **ML Version**: 1.0.0
-**Status**: Production Ready
+**Status**: Experimental — unsupervised models, not yet evaluated against
+labeled data (see section 8)
 

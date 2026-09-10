@@ -8,6 +8,7 @@
 import os
 import sqlite3
 import json
+import logging
 import subprocess
 import sys
 import uuid
@@ -23,6 +24,8 @@ from api.config import init_config, get_config
 from api.user_manager import UserManager
 from playbooks.playbook_model import PlaybookManager
 from playbooks.playbook_executor import PlaybookExecutor
+
+logger = logging.getLogger(__name__)
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -418,8 +421,9 @@ def create_alert():
             'created_at': datetime.utcnow().isoformat()
         }), 201
     
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    except Exception:
+        logger.exception("Unhandled error in %s", request.path)
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @app.route('/api/v1/alerts', methods=['GET'])
@@ -456,8 +460,9 @@ def get_alerts():
             'has_more': offset + limit < total_count
         })
     
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    except Exception:
+        logger.exception("Unhandled error in %s", request.path)
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @app.route('/api/v1/alerts/<alert_id>', methods=['GET'])
@@ -473,8 +478,9 @@ def get_alert(alert_id):
         
         return jsonify(alert)
     
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    except Exception:
+        logger.exception("Unhandled error in %s", request.path)
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @app.route('/api/v1/alerts/<alert_id>', methods=['PUT'])
@@ -504,8 +510,9 @@ def update_alert(alert_id):
         else:
             return jsonify({'error': 'Alert not found'}), 404
     
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    except Exception:
+        logger.exception("Unhandled error in %s", request.path)
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @app.route('/api/v1/alerts/<alert_id>/acknowledge', methods=['POST'])
@@ -539,8 +546,9 @@ def acknowledge_alert(alert_id):
         else:
             return jsonify({'error': 'Alert not found'}), 404
     
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    except Exception:
+        logger.exception("Unhandled error in %s", request.path)
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @app.route('/api/v1/alerts/<alert_id>/resolve', methods=['POST'])
@@ -575,8 +583,9 @@ def resolve_alert(alert_id):
         else:
             return jsonify({'error': 'Alert not found'}), 404
     
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    except Exception:
+        logger.exception("Unhandled error in %s", request.path)
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @app.route('/api/v1/alerts/<alert_id>', methods=['DELETE'])
@@ -599,8 +608,9 @@ def delete_alert(alert_id):
         else:
             return jsonify({'error': 'Alert not found'}), 404
     
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    except Exception:
+        logger.exception("Unhandled error in %s", request.path)
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @app.route('/api/v1/alerts/statistics', methods=['GET'])
@@ -613,8 +623,9 @@ def get_statistics():
         stats = alert_service.get_alert_statistics()
         return jsonify(stats)
     
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    except Exception:
+        logger.exception("Unhandled error in %s", request.path)
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @app.route('/api/v1/alerts/top-ips', methods=['GET'])
@@ -628,8 +639,9 @@ def get_top_ips():
         ips = alert_service.get_top_attacking_ips(limit)
         return jsonify({'top_ips': ips})
     
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    except Exception:
+        logger.exception("Unhandled error in %s", request.path)
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @app.route('/api/v1/correlations', methods=['GET'])
@@ -661,8 +673,9 @@ def get_correlations():
             payload['graph'] = AttackGraph.from_campaigns(campaigns).to_dict()
         return jsonify(payload)
 
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    except Exception:
+        logger.exception("Unhandled error in %s", request.path)
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @app.route('/api/v1/playbooks', methods=['GET'])
@@ -673,8 +686,9 @@ def list_playbooks():
     try:
         playbooks = [p.to_dict() for p in playbook_manager.list_playbooks(enabled_only=False)]
         return jsonify({'playbooks': playbooks})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    except Exception:
+        logger.exception("Unhandled error in %s", request.path)
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @app.route('/api/v1/playbooks', methods=['POST'])
@@ -689,8 +703,12 @@ def create_playbook():
 
         playbook = playbook_manager.create_playbook(data)
         return jsonify({'playbook': playbook.to_dict()}), 201
-    except Exception as e:
+    except ValueError as e:
+        # Schema validation failures are the caller's problem to fix.
         return jsonify({'error': str(e)}), 400
+    except Exception:
+        logger.exception("Unhandled error in %s", request.path)
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @app.route('/api/v1/playbooks/<playbook_id>', methods=['GET'])
@@ -703,8 +721,9 @@ def get_playbook(playbook_id):
         if not playbook:
             return jsonify({'error': 'Playbook not found'}), 404
         return jsonify({'playbook': playbook.to_dict()})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    except Exception:
+        logger.exception("Unhandled error in %s", request.path)
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @app.route('/api/v1/playbooks/<playbook_id>', methods=['PUT'])
@@ -722,8 +741,11 @@ def update_playbook(playbook_id):
             return jsonify({'error': 'Playbook not found'}), 404
 
         return jsonify({'playbook': updated.to_dict()})
-    except Exception as e:
+    except ValueError as e:
         return jsonify({'error': str(e)}), 400
+    except Exception:
+        logger.exception("Unhandled error in %s", request.path)
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @app.route('/api/v1/playbooks/<playbook_id>', methods=['DELETE'])
@@ -736,8 +758,9 @@ def delete_playbook(playbook_id):
         if not deleted:
             return jsonify({'error': 'Playbook not found'}), 404
         return jsonify({'status': 'deleted', 'playbook_id': playbook_id})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    except Exception:
+        logger.exception("Unhandled error in %s", request.path)
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @app.route('/api/v1/playbooks/<playbook_id>/execute', methods=['POST'])
@@ -763,8 +786,9 @@ def execute_playbook_route(playbook_id):
             return jsonify({'error': 'Playbook not found or execution failed'}), 404
 
         return jsonify({'execution': execution.to_dict()})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    except Exception:
+        logger.exception("Unhandled error in %s", request.path)
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @app.route('/api/v1/playbooks/<playbook_id>/history', methods=['GET'])
@@ -775,8 +799,9 @@ def get_playbook_history(playbook_id):
     try:
         history = playbook_executor.get_execution_history(playbook_id, limit=25)
         return jsonify({'history': history})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    except Exception:
+        logger.exception("Unhandled error in %s", request.path)
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 ################################################################################
@@ -799,12 +824,28 @@ def health_check():
 
 if __name__ == '__main__':
     import ssl
-    
+    from api.config import ConfigurationError
+
     # Get configuration
     host = config.get('API_HOST', '0.0.0.0')
     port = config.get('API_PORT', 8443)
     debug = config.get('API_DEBUG', False)
-    
+
+    # Fail fast on a misconfigured deployment rather than serving traffic
+    # with a default secret, missing certs, or debug mode enabled.
+    if not debug:
+        try:
+            config.validate_production()
+        except ConfigurationError as e:
+            print(f"✗ {e}")
+            raise SystemExit(1)
+
+    try:
+        config.ensure_ssl_certificates()
+    except ConfigurationError as e:
+        print(f"✗ {e}")
+        raise SystemExit(1)
+
     # SSL/TLS context
     ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     ssl_context.load_cert_chain(

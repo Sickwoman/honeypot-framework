@@ -6,6 +6,7 @@
 ################################################################################
 
 import os
+import re
 import yaml
 import json
 import uuid
@@ -373,18 +374,30 @@ class PlaybookManager:
         del self.playbooks[playbook_id]
         
         # Remove file
-        filepath = os.path.join(self.playbooks_dir, f"{playbook.name.replace(' ', '_')}.yml")
+        filepath = self._playbook_path(playbook)
         if os.path.exists(filepath):
             os.remove(filepath)
-        
+
         logger.info(f"Deleted playbook: {playbook.name}")
         return True
-    
+
+    def _playbook_path(self, playbook: PlaybookDefinition) -> str:
+        """Resolve a playbook's on-disk path from its id.
+
+        Playbook ids and names come from API callers, so the filename is
+        restricted to a safe character set -- otherwise a name like
+        '../../etc/cron.d/evil' would write or delete outside playbooks_dir.
+        """
+        safe_id = re.sub(r'[^A-Za-z0-9_-]', '_', str(playbook.id))
+        if not safe_id or safe_id.strip('_') == '':
+            raise ValueError(f"Unusable playbook id: {playbook.id!r}")
+
+        return os.path.join(self.playbooks_dir, f"{safe_id}.yml")
+
     def _save_playbook(self, playbook: PlaybookDefinition):
         """Save playbook to YAML file"""
-        filename = playbook.name.lower().replace(' ', '_') + '.yml'
-        filepath = os.path.join(self.playbooks_dir, filename)
-        
+        filepath = self._playbook_path(playbook)
+
         with open(filepath, 'w') as f:
             yaml.dump(playbook.to_dict(), f, default_flow_style=False, sort_keys=False)
     

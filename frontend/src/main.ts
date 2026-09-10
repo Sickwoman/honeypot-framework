@@ -94,8 +94,13 @@ function selectedAlert(): Alert {
   return state.alerts.find((alert) => alert.id === state.selectedId) || state.alerts[0] || demoAlerts[0];
 }
 
+const SEVERITY_LEVELS = ['critical', 'high', 'medium', 'low', 'info'];
+
+// Rendered into a class attribute, so restrict it to the known vocabulary
+// rather than trusting whatever the backend put in severity/threat_level.
 function severityClass(severity?: string): string {
-  return `severity-${String(severity || 'info').toLowerCase()}`;
+  const level = String(severity ?? '').toLowerCase();
+  return `severity-${SEVERITY_LEVELS.includes(level) ? level : 'info'}`;
 }
 
 function metadata(alert: Alert): Record<string, unknown> {
@@ -172,7 +177,7 @@ function render(): void {
     <section class="workspace">
       <aside class="signal-rail">
         <div class="panel-head"><div><p class="eyebrow">SIGNAL FEED</p><h3>${visible.length} investigations</h3></div><button class="filter-button" data-action="filter">⌄</button></div>
-        <div class="filter-row"><input id="search" value="${esc(state.search)}" placeholder="Search IP, tactic, service..."/><select id="severity"><option value="ALL" ${state.severity === 'ALL' ? 'selected' : ''}>All severity</option><option value="CRITICAL" ${state.severity === 'CRITICAL' ? 'selected' : ''}>Critical</option><option value="HIGH" ${state.severity === 'HIGH' ? 'selected' : ''}>High</option><option value="MEDIUM" ${state.severity === 'MEDIUM' ? 'selected' : ''}>Medium</option></select></div>
+        <div class="filter-row"><input id="search" value="${esc(state.search)}" placeholder="Search IP, tactic, service..."/><select id="severity"><option value="ALL" ${state.severity === 'ALL' ? 'selected' : ''}>All severity</option><option value="CRITICAL" ${state.severity === 'CRITICAL' ? 'selected' : ''}>Critical</option><option value="HIGH" ${state.severity === 'HIGH' ? 'selected' : ''}>High</option><option value="MEDIUM" ${state.severity === 'MEDIUM' ? 'selected' : ''}>Medium</option><option value="LOW" ${state.severity === 'LOW' ? 'selected' : ''}>Low</option><option value="INFO" ${state.severity === 'INFO' ? 'selected' : ''}>Info</option></select></div>
         <div class="alert-list">${visible.map((alert) => `<button class="alert-card ${alert.id === selected.id ? 'selected' : ''}" data-alert-id="${esc(alert.id)}"><div class="card-top"><span class="severity-pill ${severityClass(alert.severity)}">${esc(alert.severity)}</span><time>${relativeTime(alert.last_seen || alert.first_seen)}</time></div><strong>${esc(alert.alert_name)}</strong><p>${esc(alert.description)}</p><div class="card-foot"><span>${esc(alert.source_ip || 'unknown source')}</span><span>${esc(alert.service_name || 'sensor')}</span></div></button>`).join('')}</div>
         <div class="rail-foot"><span class="status-dot online"></span> Polling every 10 seconds <button data-action="toggle-live">${state.live ? 'Pause' : 'Resume'}</button></div>
       </aside>
@@ -279,11 +284,30 @@ function authHeaders(): HeadersInit {
 }
 
 function configureApi(): void {
-  const url = window.prompt('Alert API URL', state.apiUrl);
-  if (!url) return;
+  const url = window.prompt('Alert API URL (leave blank to sign out)', state.apiUrl);
+  if (url === null) return;
+
+  if (!url.trim()) {
+    signOut();
+    return;
+  }
+
+  if (!/^(https?:\/\/|\/)/.test(url.trim())) {
+    window.alert('API URL must start with https://, http:// or /');
+    return;
+  }
+
   const token = window.prompt('API key or Bearer token (optional)', state.token);
-  state.apiUrl = url; state.token = token || '';
+  state.apiUrl = url.trim(); state.token = token || '';
   localStorage.setItem('nightwatch-api', state.apiUrl); localStorage.setItem('nightwatch-token', state.token);
+  fetchAlerts();
+}
+
+function signOut(): void {
+  state.token = '';
+  localStorage.removeItem('nightwatch-token');
+  state.alerts = [];
+  state.demo = true;
   fetchAlerts();
 }
 

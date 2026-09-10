@@ -14,7 +14,7 @@ import uuid
 import logging
 import secrets
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
 import bcrypt
@@ -23,6 +23,12 @@ from api.config import get_config
 from api.rbac import Role, is_valid_role
 
 logger = logging.getLogger(__name__)
+
+# Brute-force protection: after MAX_FAILED_LOGIN_ATTEMPTS consecutive failures
+# an account stops accepting logins for LOCKOUT_MINUTES. The counter is stored
+# in users.failed_login_attempts and cleared by a successful login.
+MAX_FAILED_LOGIN_ATTEMPTS = int(os.getenv("MAX_FAILED_LOGIN_ATTEMPTS", 5))
+LOCKOUT_MINUTES = int(os.getenv("ACCOUNT_LOCKOUT_MINUTES", 15))
 
 
 class UserError(Exception):
@@ -128,12 +134,34 @@ class UserManager:
     # ------------------------------------------------------------------ #
     # Authentication
     # ------------------------------------------------------------------ #
+    @staticmethod
+    def is_locked_out(user: Dict) -> bool:
+        """True while an account is inside its lockout window after too many
+        consecutive failed logins."""
+        if (user.get("failed_login_attempts") or 0) < MAX_FAILED_LOGIN_ATTEMPTS:
+            return False
+
+        last_attempt = user.get("updated_at")
+        if not last_attempt:
+            return True
+        if isinstance(last_attempt, str):
+            try:
+                last_attempt = datetime.fromisoformat(last_attempt)
+            except ValueError:
+                return True
+
+        return datetime.utcnow() - last_attempt < timedelta(minutes=LOCKOUT_MINUTES)
+
     def verify_credentials(self, username: str, password: str) -> Optional[Dict]:
         """Validate username+password. On success returns the user dict (minus
         the hash) and records the login; on failure returns None and records a
-        failed attempt. Disabled accounts always fail."""
+        failed attempt. Disabled and locked-out accounts always fail."""
         user = self.get_by_username(username)
         if not user or not user.get("enabled"):
+            return None
+
+        if self.is_locked_out(user):
+            logger.warning("Rejected login for locked-out account: %s", username)
             return None
 
         if not self._check_password(password, user["password_hash"]):

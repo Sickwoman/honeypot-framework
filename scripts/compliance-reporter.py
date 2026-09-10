@@ -17,6 +17,8 @@ import hashlib
 import logging
 from pathlib import Path
 
+import es_client
+
 try:
     from reportlab.lib.pagesizes import letter, A4
     from reportlab.lib import colors
@@ -66,14 +68,14 @@ class ComplianceEvidence:
 class ComplianceReporter:
     """Main compliance reporting engine"""
     
-    def __init__(self, es_url: str = "https://localhost:9200",
-                 username: str = "elastic",
-                 password: str = "changeme",
-                 verify_ssl: bool = False):
-        self.es_url = es_url
-        self.username = username
-        self.password = password
-        self.verify_ssl = verify_ssl
+    def __init__(self, es_url: str = None,
+                 username: str = None,
+                 password: str = None,
+                 verify_ssl=None):
+        self.es_url = es_url or es_client.url()
+        self.username = username or es_client.username()
+        self.password = password or es_client.password()
+        self.verify_ssl = es_client.verify() if verify_ssl is None else verify_ssl
         self.evidence_trail: List[ComplianceEvidence] = []
         
         logger.info(f"Initialized ComplianceReporter for {es_url}")
@@ -668,22 +670,22 @@ def main():
     parser = argparse.ArgumentParser(description="Compliance Reporting System")
     parser.add_argument("--standard", choices=["SOC2", "PCI-DSS", "HIPAA", "ALL"],
                         default="SOC2", help="Compliance standard to audit")
-    parser.add_argument("--es-url", default="https://localhost:9200",
-                        help="Elasticsearch URL")
-    parser.add_argument("--username", default="elastic",
-                        help="Elasticsearch username")
-    parser.add_argument("--password", default="changeme",
-                        help="Elasticsearch password")
-    parser.add_argument("--verify-ssl", action="store_true",
-                        help="Verify SSL certificates")
-    
+    parser.add_argument("--es-url", default=None,
+                        help="Elasticsearch URL (default: $ELASTICSEARCH_URL)")
+    parser.add_argument("--username", default=None,
+                        help="Elasticsearch username (default: $ELASTICSEARCH_USERNAME)")
+    parser.add_argument("--password", default=None,
+                        help="Elasticsearch password (default: $ELASTICSEARCH_PASSWORD)")
+    parser.add_argument("--no-verify-ssl", action="store_true",
+                        help="Disable TLS certificate verification (not recommended)")
+
     args = parser.parse_args()
-    
+
     reporter = ComplianceReporter(
         es_url=args.es_url,
         username=args.username,
         password=args.password,
-        verify_ssl=args.verify_ssl
+        verify_ssl=False if args.no_verify_ssl else None
     )
     
     standards = [ComplianceStandard[args.standard]] if args.standard != "ALL" else list(ComplianceStandard)

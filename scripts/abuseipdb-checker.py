@@ -10,8 +10,9 @@ import json
 import sys
 import time
 from datetime import datetime, timedelta
-from elasticsearch import Elasticsearch
 import argparse
+
+import es_client
 
 class AbuseIPDBChecker:
     def __init__(self, api_key=None):
@@ -160,9 +161,7 @@ class AbuseIPDBChecker:
     def enrich_elasticsearch(self, ip_address):
         """Enrich Elasticsearch documents with threat intelligence"""
         try:
-            self.es = Elasticsearch(['https://localhost:9200'], 
-                                   basic_auth=("elastic", "changeme"),
-                                   verify_certs=False)
+            self.es = es_client.build_client()
             
             result = self.check_ip(ip_address)
             formatted = self.format_result(ip_address, result)
@@ -216,9 +215,7 @@ class AbuseIPDBChecker:
     def get_honeypot_ips(self):
         """Get attacking IPs from Elasticsearch"""
         try:
-            self.es = Elasticsearch(['https://localhost:9200'],
-                                   basic_auth=("elastic", "changeme"),
-                                   verify_certs=False)
+            self.es = es_client.build_client()
             
             response = self.es.search(
                 index="honeypot-*",

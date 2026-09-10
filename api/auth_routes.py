@@ -20,7 +20,7 @@ from api.auth import (
 from api.decorators import require_permission
 from api.rbac import Permission
 from api.user_manager import UserManager, UserError
-from api.middleware import AuditLogger
+from api.middleware import AuditLogger, rate_limit
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -29,6 +29,7 @@ audit_logger = AuditLogger()
 
 
 @auth_bp.route("/auth/login", methods=["POST"])
+@rate_limit(max_requests=10, window_seconds=300)
 def login():
     """Validate credentials against the users table and issue a JWT."""
     data = request.get_json(silent=True) or {}

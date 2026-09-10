@@ -19,10 +19,12 @@ scrape_configs:
       - targets: ['localhost:9200']
     basic_auth:
       username: 'elastic'
-      password: 'changeme'
+      # Password lives in a file readable only by the Prometheus user --
+      # never inline a credential here.
+      password_file: /etc/honeypot-framework/secrets/elastic-password
     scheme: https
     tls_config:
-      insecure_skip_verify: true
+      ca_file: /etc/honeypot-framework/ssl/ca-cert.pem
     metrics_path: '/_prometheus/metrics'
 
   - job_name: 'node'

@@ -14,8 +14,11 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 ELASTICSEARCH_URL="https://localhost:9200"
-ELASTICSEARCH_USER="elastic"
-ELASTICSEARCH_PASSWORD="${ELASTICSEARCH_PASSWORD:-changeme}"
+ELASTICSEARCH_USER="${ELASTICSEARCH_USERNAME:-elastic}"
+if [ -z "${ELASTICSEARCH_PASSWORD:-}" ]; then
+    echo "ELASTICSEARCH_PASSWORD is not set. Refusing to use a default password." >&2
+    exit 1
+fi
 
 echo -e "${BLUE}"
 echo "╔════════════════════════════════════════════════════════════════╗"

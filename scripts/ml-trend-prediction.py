@@ -15,13 +15,14 @@ from sklearn.preprocessing import PolynomialFeatures
 import warnings
 warnings.filterwarnings('ignore')
 
+import es_client
+
 class TrendPredictor:
-    def __init__(self, es_url="https://localhost:9200",
-                 username="elastic", password="changeme"):
-        self.es_url = es_url
-        self.username = username
-        self.password = password
-        self.verify_ssl = False
+    def __init__(self, es_url=None, username=None, password=None):
+        self.es_url = es_url or es_client.url()
+        self.username = username or es_client.username()
+        self.password = password or es_client.password()
+        self.verify_ssl = es_client.verify()
     
     def fetch_time_series_data(self, period="30d", interval="1d"):
         """Fetch attack volume time series data"""
