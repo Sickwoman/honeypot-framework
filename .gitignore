@@ -22,6 +22,17 @@ aws-credentials
 *.key
 !example*.pem
 
+# Credentials & keys (extension-less SSH keys, keystores, service accounts)
+id_rsa*
+id_ecdsa*
+id_ed25519*
+*.pfx
+*.p12
+*.p12.pass
+*.jks
+credentials.json
+secrets/
+
 # Python
 __pycache__/
 *.py[cod]

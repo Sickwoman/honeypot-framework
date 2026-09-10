@@ -106,3 +106,8 @@ systemctl status pqc-honeypot.service
 | Captures | creds + shell + TTY | kex negotiated only | creds, then → Cowrie |
 | Deploy | EC2 (source) | **EC2 (this)** | Docker Compose |
 | Port | 2222 | 2223 | 2225 |
+
+Port allocation across honeypots: 2222 Cowrie, 2223 PQC SSH (this), 2224
+OpenCanary decoy SSH (`../dionaea/opencanary.conf`), 2225 PoC relay. Two
+honeypots bound to the same port silently shrinks the trap surface — one of
+them just fails to bind.
