@@ -264,10 +264,7 @@ cat > "$PROJECT_ROOT/COMPLIANCE-SETUP.md" << 'EOF'
 
 ## Documentation
 
-- [COMPLIANCE-README.md](docs/COMPLIANCE-README.md) - Master compliance guide
-- [COMPLIANCE-SOC2.md](docs/COMPLIANCE-SOC2.md) - SOC2 framework
-- [COMPLIANCE-PCI-DSS.md](docs/COMPLIANCE-PCI-DSS.md) - PCI-DSS framework
-- [COMPLIANCE-HIPAA.md](docs/COMPLIANCE-HIPAA.md) - HIPAA framework
+- [COMPLIANCE.md](docs/COMPLIANCE.md) - What the reporter collects, and its limits
 
 ## Automated Reports
 
@@ -308,7 +305,7 @@ cat compliance_reports/compliance.log
 
 ## Next Steps
 
-1. Review [COMPLIANCE-README.md](docs/COMPLIANCE-README.md)
+1. Review [COMPLIANCE.md](docs/COMPLIANCE.md)
 2. Choose which standards apply to your organization
 3. Review applicable framework document (SOC2, PCI-DSS, or HIPAA)
 4. Complete compliance checklist
@@ -329,10 +326,7 @@ echo ""
 echo "📚 Next Steps:"
 echo ""
 echo "1. Review compliance documentation:"
-echo "   - docs/COMPLIANCE-README.md"
-echo "   - docs/COMPLIANCE-SOC2.md"
-echo "   - docs/COMPLIANCE-PCI-DSS.md"
-echo "   - docs/COMPLIANCE-HIPAA.md"
+echo "   - docs/COMPLIANCE.md"
 echo ""
 echo "2. Customize compliance configuration:"
 echo "   - nano config/compliance-config.yml"

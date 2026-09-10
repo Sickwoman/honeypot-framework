@@ -63,8 +63,8 @@ class Permission:
 #
 # Built HIERARCHICALLY: OBSERVER < ANALYST < RESPONDER < ADMIN. Each higher
 # role inherits every permission of the one below it, so the tiers below only
-# list the permissions each role ADDS. This mirrors the roadmap
-# (IMPROVEMENTS-AND-FEATURES.md:200-204):
+# list the permissions each role ADDS. The tiers are documented in
+# docs/RBAC-POLICY.md:
 #   OBSERVER  - view-only access to dashboards
 #   ANALYST   - view alerts, create incidents, run queries
 #   RESPONDER - modify alerts, acknowledge, close incidents
