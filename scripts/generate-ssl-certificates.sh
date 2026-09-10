@@ -134,13 +134,20 @@ EOF
     chmod 600 "$ES_KEY"
     chmod 644 "$ES_CERT"
     
-    # Create PKCS12 format (required by Elasticsearch)
+    # Create PKCS12 format (required by Elasticsearch).
+    # The passphrase is generated per install and written to a root-only file
+    # rather than hardcoded -- it protects the Elasticsearch private key.
+    local P12_PASSWORD_FILE="$CERT_DIR/elasticsearch.p12.pass"
+    openssl rand -base64 32 > "$P12_PASSWORD_FILE"
+    chmod 600 "$P12_PASSWORD_FILE"
+
     openssl pkcs12 -export -in "$ES_CERT" -inkey "$ES_KEY" \
         -out "$CERT_DIR/elasticsearch.p12" \
         -name "elasticsearch" \
-        -passout pass:changeme
-    
+        -passout "file:$P12_PASSWORD_FILE"
+
     chmod 600 "$CERT_DIR/elasticsearch.p12"
+    log_info "PKCS12 passphrase written to $P12_PASSWORD_FILE"
     
     log_success "Elasticsearch certificates generated"
 }

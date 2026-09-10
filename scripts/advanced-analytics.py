@@ -12,13 +12,14 @@ from datetime import datetime, timedelta
 import pandas as pd
 import os
 
+import es_client
+
 class AdvancedAnalytics:
-    def __init__(self, es_url="https://localhost:9200",
-                 username="elastic", password="changeme"):
-        self.es_url = es_url
-        self.username = username
-        self.password = password
-        self.verify_ssl = False
+    def __init__(self, es_url=None, username=None, password=None):
+        self.es_url = es_url or es_client.url()
+        self.username = username or es_client.username()
+        self.password = password or es_client.password()
+        self.verify_ssl = es_client.verify()
     
     def get_attack_trends(self, period="7d", interval="1d"):
         """Analyze attack trends over time"""

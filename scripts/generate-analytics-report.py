@@ -8,18 +8,18 @@
 import json
 import requests
 from datetime import datetime, timedelta
-from elasticsearch import Elasticsearch
 import argparse
 
+import es_client
+
 class AnalyticsReportGenerator:
-    def __init__(self, es_host="https://localhost:9200", 
-                 username="elastic", password="changeme"):
-        self.es = Elasticsearch(
-            [es_host],
-            basic_auth=(username, password),
-            verify_certs=False
+    def __init__(self, es_host=None, username=None, password=None):
+        self.es = es_client.build_client(
+            es_host,
+            basic_auth=(username or es_client.username(),
+                        password or es_client.password()),
         )
-        self.verify_ssl = False
+        self.verify_ssl = es_client.verify()
     
     def get_document_count(self, days=1):
         """Get total documents in last N days"""

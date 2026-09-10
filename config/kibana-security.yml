@@ -33,9 +33,11 @@ server.ssl.cipherSuites: [
 # Elasticsearch server URL (HTTPS)
 elasticsearch.hosts: ["https://localhost:9200"]
 
-# Use kibana_system user (recommended over elastic)
+# Use kibana_system user (recommended over elastic).
+# The password is read from the KIBANA_SYSTEM_PASSWORD environment variable --
+# never commit a real (or default) password to this file.
 elasticsearch.username: "kibana_system"
-elasticsearch.password: "changeme"
+elasticsearch.password: "${KIBANA_SYSTEM_PASSWORD}"
 
 # Certificate verification for Elasticsearch
 elasticsearch.ssl.verificationMode: certificate

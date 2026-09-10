@@ -7,7 +7,6 @@
 
 import json
 from datetime import datetime, timedelta
-from elasticsearch import Elasticsearch
 import argparse
 
 try:
@@ -21,13 +20,14 @@ except ImportError:
     print("❌ reportlab not installed. Install with: pip3 install reportlab")
     exit(1)
 
+import es_client
+
 class PDFReportGenerator:
-    def __init__(self, es_host="https://localhost:9200",
-                 username="elastic", password="changeme"):
-        self.es = Elasticsearch(
-            [es_host],
-            basic_auth=(username, password),
-            verify_certs=False
+    def __init__(self, es_host=None, username=None, password=None):
+        self.es = es_client.build_client(
+            es_host,
+            basic_auth=(username or es_client.username(),
+                        password or es_client.password()),
         )
         self.styles = getSampleStyleSheet()
         self.setup_custom_styles()
