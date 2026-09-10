@@ -7,6 +7,21 @@ const https = require('https');
 const ABUSEIPDB_URL = 'https://api.abuseipdb.com/api/v2/check';
 const VT_URL = 'https://www.virustotal.com/api/v3/ip_addresses';
 
+const IPV4_PATTERN = /^(\d{1,3}\.){3}\d{1,3}$/;
+const IPV6_PATTERN = /^[0-9a-fA-F:]+$/;
+
+// Alert source_ip values come from attacker-controlled honeypot traffic and
+// are interpolated into outbound provider URLs, so validate before use.
+function isValidIp(value) {
+  const ip = String(value == null ? '' : value).trim();
+
+  if (IPV4_PATTERN.test(ip)) {
+    return ip.split('.').every((octet) => Number(octet) >= 0 && Number(octet) <= 255);
+  }
+
+  return ip.length >= 2 && ip.length <= 45 && ip.includes(':') && IPV6_PATTERN.test(ip);
+}
+
 function printHelp() {
   console.log(`Advanced Threat Intelligence Enricher
 
@@ -183,6 +198,12 @@ async function enrichSingleIp(ip, config) {
     checked_at: new Date().toISOString(),
     threat_intel: null,
   };
+
+  if (!isValidIp(ip)) {
+    result.error = 'invalid_ip';
+    result.threat_intel = createThreatIntelSummary(ip, null, null);
+    return result;
+  }
 
   const abuseCheck = config.abuseipdbApiKey ? await queryAbuseIPDB(ip, config.abuseipdbApiKey).catch(() => null) : null;
   const vtCheck = config.virusTotalApiKey ? await queryVirusTotal(ip, config.virusTotalApiKey).catch(() => null) : null;
