@@ -7,6 +7,7 @@
 
 import os
 import json
+import ipaddress
 import subprocess
 import logging
 from abc import ABC, abstractmethod
@@ -19,6 +20,54 @@ from email.mime.multipart import MIMEMultipart
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
+# Firewall rules added by playbooks are journalled here so
+# scripts/expire-firewall-blocks.py can remove them once they expire.
+FIREWALL_RULES_FILE = os.getenv(
+    'HONEYPOT_FIREWALL_RULES_FILE', '/etc/honeypot-framework/firewall-rules.jsonl'
+)
+
+# Ports the honeypot deliberately exposes. isolate_honeypot drops traffic to
+# these only -- never a blanket INPUT DROP, which would also cut off the
+# management/SSH path used to recover the host.
+DEFAULT_HONEYPOT_PORTS = (2222, 2223)
+
+
+def parse_duration_seconds(duration_str: Any) -> int:
+    """Parse a duration like '24h', '30m', '7d' or a bare int into seconds."""
+    if isinstance(duration_str, int):
+        return duration_str
+
+    duration_str = str(duration_str).lower().strip()
+    multipliers = {'s': 1, 'm': 60, 'h': 3600, 'd': 86400}
+
+    for unit, multiplier in multipliers.items():
+        if duration_str.endswith(unit):
+            try:
+                return int(duration_str[:-1]) * multiplier
+            except ValueError:
+                return 0
+
+    try:
+        return int(duration_str)
+    except ValueError:
+        return 0
+
+
+def validate_ip(value: Any) -> str:
+    """Return `value` as a normalized IP string, or raise ValueError.
+
+    Alert fields originate from attacker-controlled honeypot traffic, so every
+    IP must be validated before it reaches a firewall command or a rules file.
+    """
+    return str(ipaddress.ip_address(str(value).strip()))
+
+
+def _record_firewall_rule(entry: Dict[str, Any]):
+    """Append a firewall rule to the expiry journal (one JSON object per line)."""
+    os.makedirs(os.path.dirname(FIREWALL_RULES_FILE), exist_ok=True)
+    with open(FIREWALL_RULES_FILE, 'a') as f:
+        f.write(json.dumps(entry) + "\n")
 
 
 class ActionHandler(ABC):
@@ -56,13 +105,19 @@ class BlockIPHandler(ActionHandler):
     def execute(self, context: Dict[str, Any], dry_run: bool = False) -> Tuple[bool, Dict]:
         """Block IP using iptables or firewall"""
         try:
-            source_ip = context.get('alert_data', {}).get('source_ip')
-            if not source_ip:
+            raw_ip = context.get('alert_data', {}).get('source_ip')
+            if not raw_ip:
                 return False, {'error': 'No source IP found in alert'}
-            
-            action_name = self.action_config.get('name', 'block_ip')
+
+            try:
+                source_ip = validate_ip(raw_ip)
+            except ValueError:
+                logger.warning("Refusing to block malformed source IP: %r", raw_ip)
+                return False, {'error': 'Invalid source IP in alert'}
+
             duration = self.action_config.get('duration', '24h')
-            
+            duration_seconds = parse_duration_seconds(duration)
+
             if dry_run:
                 return True, {
                     'action': 'block_ip',
@@ -70,30 +125,34 @@ class BlockIPHandler(ActionHandler):
                     'duration': duration,
                     'message': f'[DRY RUN] Would block {source_ip} for {duration}'
                 }
-            
-            # Block IP using iptables
-            cmd = f'sudo iptables -I INPUT -s {source_ip} -j DROP'
-            result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-            
+
+            expires_at = datetime.utcnow() + timedelta(seconds=duration_seconds)
+            result = subprocess.run(
+                ['sudo', 'iptables', '-I', 'INPUT', '-s', source_ip, '-j', 'DROP'],
+                capture_output=True, text=True,
+            )
+
             if result.returncode != 0:
                 return False, {'error': result.stderr}
-            
-            # Also save to firewall rules for persistence
-            rules_file = '/etc/honeypot-framework/firewall-rules.txt'
-            os.makedirs(os.path.dirname(rules_file), exist_ok=True)
-            
-            with open(rules_file, 'a') as f:
-                f.write(f"{source_ip} {duration} {datetime.utcnow().isoformat()}\n")
-            
-            logger.info(f"Blocked IP: {source_ip}")
-            
+
+            _record_firewall_rule({
+                'type': 'block_ip',
+                'ip': source_ip,
+                'duration': duration,
+                'blocked_at': datetime.utcnow().isoformat(),
+                'expires_at': expires_at.isoformat(),
+            })
+
+            logger.info(f"Blocked IP: {source_ip} (expires {expires_at.isoformat()})")
+
             return True, {
                 'action': 'block_ip',
                 'ip': source_ip,
                 'duration': duration,
-                'message': f'Blocked {source_ip}'
+                'expires_at': expires_at.isoformat(),
+                'message': f'Blocked {source_ip} until {expires_at.isoformat()}'
             }
-        
+
         except Exception as e:
             logger.error(f"Error blocking IP: {e}")
             return False, {'error': str(e)}
@@ -322,35 +381,62 @@ class IsolateHoneypotHandler(ActionHandler):
     """Isolate honeypot from network"""
     
     def execute(self, context: Dict[str, Any], dry_run: bool = False) -> Tuple[bool, Dict]:
-        """Isolate honeypot"""
+        """Isolate the honeypot's exposed services.
+
+        Only the honeypot service ports are dropped -- a blanket INPUT DROP
+        would also sever the management/SSH path needed to recover the host.
+        """
         try:
             isolation_duration = self.action_config.get('duration', '1h')
             preserve_logs = self.action_config.get('preserve_logs', True)
-            
+            duration_seconds = parse_duration_seconds(isolation_duration)
+
+            try:
+                ports = [int(p) for p in self.action_config.get('ports', DEFAULT_HONEYPOT_PORTS)]
+            except (TypeError, ValueError):
+                return False, {'error': 'Invalid ports in isolate_honeypot action config'}
+
+            if not ports:
+                return False, {'error': 'No honeypot ports configured to isolate'}
+
             if dry_run:
                 return True, {
                     'action': 'isolate_honeypot',
                     'duration': isolation_duration,
+                    'ports': ports,
                     'preserve_logs': preserve_logs,
-                    'message': f'[DRY RUN] Would isolate honeypot for {isolation_duration}'
+                    'message': f'[DRY RUN] Would isolate ports {ports} for {isolation_duration}'
                 }
-            
-            # Disable network interfaces
-            cmd = 'sudo iptables -I INPUT -j DROP'
-            result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-            
-            if result.returncode != 0:
-                return False, {'error': result.stderr}
-            
-            logger.info(f"Isolated honeypot for {isolation_duration}")
-            
+
+            expires_at = datetime.utcnow() + timedelta(seconds=duration_seconds)
+            for port in ports:
+                result = subprocess.run(
+                    ['sudo', 'iptables', '-I', 'INPUT', '-p', 'tcp',
+                     '--dport', str(port), '-j', 'DROP'],
+                    capture_output=True, text=True,
+                )
+                if result.returncode != 0:
+                    return False, {'error': result.stderr}
+
+                _record_firewall_rule({
+                    'type': 'isolate_honeypot',
+                    'port': port,
+                    'duration': isolation_duration,
+                    'blocked_at': datetime.utcnow().isoformat(),
+                    'expires_at': expires_at.isoformat(),
+                })
+
+            logger.info(f"Isolated honeypot ports {ports} until {expires_at.isoformat()}")
+
             return True, {
                 'action': 'isolate_honeypot',
                 'duration': isolation_duration,
+                'ports': ports,
+                'expires_at': expires_at.isoformat(),
                 'preserve_logs': preserve_logs,
-                'message': f'Isolated honeypot'
+                'message': f'Isolated ports {ports} until {expires_at.isoformat()}'
             }
-        
+
         except Exception as e:
             logger.error(f"Error isolating honeypot: {e}")
             return False, {'error': str(e)}
@@ -361,11 +447,11 @@ class RunScriptHandler(ActionHandler):
     
     def execute(self, context: Dict[str, Any], dry_run: bool = False) -> Tuple[bool, Dict]:
         """Execute script"""
+        timeout = self.action_config.get('timeout', 30)
         try:
             script_path = self.action_config.get('script_path')
             script_args = self.action_config.get('args', [])
-            timeout = self.action_config.get('timeout', 30)
-            
+
             if not script_path:
                 return False, {'error': 'No script path provided'}
             
@@ -462,7 +548,7 @@ class DelayHandler(ActionHandler):
     def execute(self, context: Dict[str, Any], dry_run: bool = False) -> Tuple[bool, Dict]:
         """Delay execution"""
         try:
-            delay_seconds = self._parse_duration(self.action_config.get('duration', '0'))
+            delay_seconds = parse_duration_seconds(self.action_config.get('duration', '0'))
             
             if dry_run:
                 return True, {
@@ -479,36 +565,10 @@ class DelayHandler(ActionHandler):
                 'duration': delay_seconds,
                 'message': f'Waited {delay_seconds} seconds'
             }
-        
+
         except Exception as e:
             logger.error(f"Error in delay: {e}")
             return False, {'error': str(e)}
-    
-    @staticmethod
-    def _parse_duration(duration_str: str) -> int:
-        """Parse duration string to seconds"""
-        if isinstance(duration_str, int):
-            return duration_str
-        
-        duration_str = str(duration_str).lower().strip()
-        multipliers = {
-            's': 1,
-            'm': 60,
-            'h': 3600,
-            'd': 86400
-        }
-        
-        for unit, multiplier in multipliers.items():
-            if duration_str.endswith(unit):
-                try:
-                    return int(duration_str[:-1]) * multiplier
-                except ValueError:
-                    return 0
-        
-        try:
-            return int(duration_str)
-        except ValueError:
-            return 0
 
 
 class ActionFactory:

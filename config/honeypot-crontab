@@ -1,4 +1,15 @@
-0 2 * * * /home/moksh/Desktop/honeypot-framework/scripts/automated-backup.sh
-0 9 * * * /home/moksh/Desktop/honeypot-framework/scripts/schedule-reports.sh daily
-0 8 * * 1 /home/moksh/Desktop/honeypot-framework/scripts/schedule-reports.sh weekly
-0 7 1 * * /home/moksh/Desktop/honeypot-framework/scripts/schedule-reports.sh monthly
+# Honeypot Framework scheduled jobs.
+# Install with: sudo crontab config/honeypot-crontab
+#
+# Scripts are expected at /opt/honeypot-framework (root-owned). Do NOT point
+# root's crontab at a path under a user's home directory -- anyone who can
+# write there could then execute code as root.
+HONEYPOT_HOME=/opt/honeypot-framework
+
+# Remove expired playbook firewall blocks (block_ip / isolate_honeypot).
+*/5 * * * * /opt/honeypot-framework/scripts/expire-firewall-blocks.py
+
+0 2 * * * /opt/honeypot-framework/scripts/automated-backup.sh
+0 9 * * * /opt/honeypot-framework/scripts/schedule-reports.sh daily
+0 8 * * 1 /opt/honeypot-framework/scripts/schedule-reports.sh weekly
+0 7 1 * * /opt/honeypot-framework/scripts/schedule-reports.sh monthly

@@ -74,6 +74,83 @@ def test_playbook_permissions_are_defined():
     assert Permission.PLAYBOOKS_EXECUTE in ROLE_PERMISSIONS[Role.RESPONDER]
 
 
+def test_block_ip_rejects_malformed_source_ip(monkeypatch):
+    """source_ip comes from attacker-controlled traffic: it must be validated
+    before it can reach a firewall command."""
+    from playbooks import action_handlers
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("subprocess must not run for an invalid IP")
+
+    monkeypatch.setattr(action_handlers.subprocess, "run", fail_if_called)
+
+    handler = action_handlers.BlockIPHandler({"id": "a1", "type": "block_ip"})
+    success, output = handler.execute(
+        {"alert_data": {"source_ip": "1.2.3.4; rm -rf /"}}, dry_run=False
+    )
+
+    assert success is False
+    assert "Invalid source IP" in output["error"]
+
+
+def test_block_ip_uses_argument_list_not_shell(monkeypatch, tmp_path):
+    from playbooks import action_handlers
+
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        captured["kwargs"] = kwargs
+        return type("Completed", (), {"returncode": 0, "stderr": "", "stdout": ""})()
+
+    monkeypatch.setattr(action_handlers.subprocess, "run", fake_run)
+    monkeypatch.setattr(action_handlers, "FIREWALL_RULES_FILE", str(tmp_path / "rules.jsonl"))
+
+    handler = action_handlers.BlockIPHandler({"id": "a1", "type": "block_ip", "duration": "1h"})
+    success, output = handler.execute(
+        {"alert_data": {"source_ip": "203.0.113.9"}}, dry_run=False
+    )
+
+    assert success is True
+    assert isinstance(captured["cmd"], list)
+    assert not captured["kwargs"].get("shell", False)
+    assert "203.0.113.9" in captured["cmd"]
+    # The block must carry an expiry so it can be undone later.
+    assert output["expires_at"]
+
+
+def test_isolate_honeypot_does_not_drop_all_traffic(monkeypatch, tmp_path):
+    """A blanket INPUT DROP would sever management access to the host."""
+    from playbooks import action_handlers
+
+    commands = []
+
+    def fake_run(cmd, **kwargs):
+        commands.append(cmd)
+        return type("Completed", (), {"returncode": 0, "stderr": "", "stdout": ""})()
+
+    monkeypatch.setattr(action_handlers.subprocess, "run", fake_run)
+    monkeypatch.setattr(action_handlers, "FIREWALL_RULES_FILE", str(tmp_path / "rules.jsonl"))
+
+    handler = action_handlers.IsolateHoneypotHandler({"id": "a2", "type": "isolate_honeypot"})
+    success, _ = handler.execute({"alert_data": {}}, dry_run=False)
+
+    assert success is True
+    assert commands, "expected at least one iptables rule"
+    for cmd in commands:
+        assert "--dport" in cmd, f"rule is not port-scoped: {cmd}"
+
+
+def test_playbook_filename_cannot_escape_playbooks_dir(tmp_path):
+    manager = PlaybookManager(str(tmp_path))
+    playbook = PlaybookDefinition.from_yaml_string(VALID_PLAYBOOK)
+    playbook.id = "../../etc/cron.d/evil"
+
+    path = manager._playbook_path(playbook)
+
+    assert os.path.dirname(os.path.abspath(path)) == os.path.abspath(str(tmp_path))
+
+
 def test_alert_creation_triggers_matching_playbooks(tmp_path, monkeypatch):
     playbook_dir = tmp_path / "playbooks"
     playbook_dir.mkdir()
