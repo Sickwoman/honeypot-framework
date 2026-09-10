@@ -26,15 +26,18 @@ inherits every permission of the one below it. The single source of truth is
 | `alerts:read`        | ✅ | ✅ | ✅ | ✅ |
 | `stats:read`         | ✅ | ✅ | ✅ | ✅ |
 | `incidents:read`     | ✅ | ✅ | ✅ | ✅ |
+| `playbooks:read`     | ✅ | ✅ | ✅ | ✅ |
 | `alerts:create`      |    | ✅ | ✅ | ✅ |
 | `incidents:create`   |    | ✅ | ✅ | ✅ |
 | `apikey:create`      |    | ✅ | ✅ | ✅ |
+| `playbooks:write`    |    | ✅ | ✅ | ✅ |
 | `alerts:update`      |    |    | ✅ | ✅ |
 | `alerts:acknowledge` |    |    | ✅ | ✅ |
 | `alerts:resolve`     |    |    | ✅ | ✅ |
 | `alerts:delete`      |    |    | ✅ | ✅ |
 | `incidents:update`   |    |    | ✅ | ✅ |
 | `incidents:close`    |    |    | ✅ | ✅ |
+| `playbooks:execute`  |    |    | ✅ | ✅ |
 | `users:read`         |    |    |    | ✅ |
 | `users:manage`       |    |    |    | ✅ |
 
@@ -51,6 +54,14 @@ inherits every permission of the one below it. The single source of truth is
 | `POST /api/v1/alerts/<id>/acknowledge`    | `alerts:acknowledge` |
 | `POST /api/v1/alerts/<id>/resolve`        | `alerts:resolve` |
 | `DELETE /api/v1/alerts/<id>`              | `alerts:delete` |
+| `GET  /api/v1/correlations`               | `stats:read` |
+| `GET  /api/v1/playbooks`                  | `playbooks:read` |
+| `GET  /api/v1/playbooks/<id>`             | `playbooks:read` |
+| `GET  /api/v1/playbooks/<id>/history`     | `playbooks:read` |
+| `POST /api/v1/playbooks`                  | `playbooks:write` |
+| `PUT  /api/v1/playbooks/<id>`             | `playbooks:write` |
+| `DELETE /api/v1/playbooks/<id>`           | `playbooks:write` |
+| `POST /api/v1/playbooks/<id>/execute`     | `playbooks:execute` |
 | `POST /auth/api-key`                      | `apikey:create` |
 | `POST /api/v1/users`                      | `users:manage` |
 | `GET  /api/v1/users`                      | `users:read` |

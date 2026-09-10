@@ -439,25 +439,17 @@ cat compliance_reports/HIPAA/*/evidence.json | jq '.evidence[] | {control_id, st
 
 ## Compliance Status
 
-| Control | Status | Evidence | Review Date |
-|---------|--------|----------|-------------|
-| 164.308(a)(1) | ✓ Pass | Risk analysis documented | 2024-09-01 |
-| 164.308(a)(2) | ✓ Pass | Security officer appointed | 2024-09-01 |
-| 164.308(a)(3) | ✓ Pass | Access management procedures | 2024-09-01 |
-| 164.308(a)(4) | ✓ Pass | RBAC implemented | 2024-09-01 |
-| 164.308(a)(5) | ✓ Pass | Training records maintained | 2024-09-01 |
-| 164.308(a)(6) | ✓ Pass | Incident procedures documented | 2024-09-01 |
-| 164.308(a)(7) | ✓ Pass | Contingency plan created | 2024-09-01 |
-| 164.308(a)(8) | ⚠ WIP  | Annual evaluation in progress | 2024-09-01 |
-| 164.310(a) | ✓ Pass | Facility access controls | 2024-09-01 |
-| 164.310(b) | ✓ Pass | Workstation use policy | 2024-09-01 |
-| 164.310(c) | ✓ Pass | Workstation security | 2024-09-01 |
-| 164.310(d) | ✓ Pass | Device controls documented | 2024-09-01 |
-| 164.312(a)(1) | ✓ Pass | Access control implemented | 2024-09-01 |
-| 164.312(a)(2) | ✓ Pass | Encryption configured | 2024-09-01 |
-| 164.312(b) | ✓ Pass | Audit logging enabled | 2024-09-01 |
-| 164.312(c) | ✓ Pass | Integrity monitoring | 2024-09-01 |
-| 164.312(d) | ✓ Pass | Transmission security | 2024-09-01 |
+> **This project has not been audited.** Nothing below is an attestation of
+> compliance. These documents map the framework's controls onto the
+> HIPAA control vocabulary as a self-assessment exercise -- useful as a
+> checklist and for learning how the controls map to real infrastructure, but
+> a genuine HIPAA position requires an independent assessor, organizational
+> policies and evidence retention that live outside this repository.
+>
+> Run `python3 scripts/compliance-reporter.py --standard HIPAA` to collect
+> the evidence this repo *can* produce (log coverage, access-control config,
+> retention settings), then judge each control yourself against the checklist
+> above.
 
 ## References
 

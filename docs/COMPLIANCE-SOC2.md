@@ -288,19 +288,17 @@ python3 scripts/compliance-reporter.py --standard SOC2
 
 ## Compliance Status
 
-| Control | Status | Last Review | Next Review |
-|---------|--------|------------|-------------|
-| CC1     | ✓ Pass | 2024-09-01 | 2024-12-01 |
-| CC2     | ✓ Pass | 2024-09-01 | 2024-12-01 |
-| CC3     | ✓ Pass | 2024-09-01 | 2024-12-01 |
-| CC4     | ⚠ WIP  | 2024-09-01 | 2024-10-01 |
-| CC5     | ✓ Pass | 2024-09-01 | 2024-12-01 |
-| CC6     | ✓ Pass | 2024-09-01 | 2024-12-01 |
-| CC7     | ✓ Pass | 2024-09-01 | 2024-12-01 |
-| CC8     | ✓ Pass | 2024-09-01 | 2024-12-01 |
-| CC9     | ✓ Pass | 2024-09-01 | 2024-12-01 |
-| A1      | ✓ Pass | 2024-09-01 | 2024-12-01 |
-| A2      | ✓ Pass | 2024-09-01 | 2024-12-01 |
+> **This project has not been audited.** Nothing below is an attestation of
+> compliance. These documents map the framework's controls onto the
+> SOC2 control vocabulary as a self-assessment exercise -- useful as a
+> checklist and for learning how the controls map to real infrastructure, but
+> a genuine SOC2 position requires an independent assessor, organizational
+> policies and evidence retention that live outside this repository.
+>
+> Run `python3 scripts/compliance-reporter.py --standard SOC2` to collect
+> the evidence this repo *can* produce (log coverage, access-control config,
+> retention settings), then judge each control yourself against the checklist
+> above.
 
 ## Resources
 

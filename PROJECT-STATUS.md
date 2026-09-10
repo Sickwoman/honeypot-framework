@@ -59,7 +59,7 @@
 ✅ Systemd services — Auto-starting on reboot
 ✅ Log rotation — Preventing disk overflow
 ✅ Health checks — Automated monitoring
-✅ Terraform code — Production-ready configurations
+✅ Terraform code — Modular configurations, validated in CI
 ✅ Documentation — Complete setup guides
 
 ---
@@ -139,7 +139,7 @@
 - [x] EC2 instances isolated in VPC
 - [x] Security groups restrict traffic
 - [x] IAM roles follow least-privilege principle
-- [x] Logs encrypted in S3
+- [ ] Logs encrypted in S3 (SSE not yet enabled)
 - [x] CloudWatch logs retained per policy
 - [ ] AWS credentials configured (pending activation)
 - [ ] CloudWatch alarms set (pending deployment)
@@ -173,10 +173,11 @@ sudo tar -czf systemd-backup.tar.gz /etc/systemd/system/honeypot* /etc/logrotate
 - AWS environments configured
 - Documentation complete
 
-**Code Quality**: ✅ 100%
-- All code review issues resolved
-- Best practices implemented
-- Production-ready
+**Code Quality**
+- Automated tests cover RBAC, playbooks, auth hardening, correlation and
+  honeytokens (`pytest`)
+- Known open items tracked in IMPROVEMENTS-AND-FEATURES.md and
+  SECURITY-CHECKLIST.md
 
 ---
 
@@ -194,9 +195,14 @@ sudo tar -czf systemd-backup.tar.gz /etc/systemd/system/honeypot* /etc/logrotate
 
 ## Final Notes
 
-This project represents a professional-grade security monitoring platform. All components are production-ready and follow industry best practices. The foundation is solid, the code is clean, and the documentation is comprehensive.
+This project is a working, well-documented security monitoring lab: honeypots,
+ELK ingestion, an RBAC-protected alert API, correlation, and automated response
+playbooks all run end to end. It is not an audited or production-hardened
+system -- TLS is not yet end to end, logs are not encrypted at rest, and there
+has been no external penetration test. Open items are tracked in
+SECURITY-CHECKLIST.md and IMPROVEMENTS-AND-FEATURES.md.
 
-**Status**: ✅ **READY FOR AWS DEPLOYMENT**
+**Status**: ✅ **READY FOR AWS DEPLOYMENT (lab / pre-production)**
 
 Once your AWS account is activated and credentials are configured, you can deploy this framework to any AWS region in minutes.
 
