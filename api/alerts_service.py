@@ -5,25 +5,29 @@
 # Handles alert CRUD operations, querying, and management
 ################################################################################
 
-import os
-import sqlite3
 import json
 import logging
+import os
+import sqlite3
 import subprocess
-import sys
 import uuid
-from datetime import datetime, timedelta
-from flask import Flask, request, jsonify, g
-from functools import wraps
-from typing import Dict, List, Tuple, Any, Optional
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Tuple
 
+from flask import Flask, g, jsonify, request
+
+from api.config import init_config
 from api.decorators import require_permission
+from api.middleware import (
+    AuditLogger,
+    log_request_response,
+    rate_limit,
+    setup_middleware,
+)
 from api.rbac import Permission
-from api.middleware import setup_middleware, AuditLogger, RequestLogger, log_request_response, rate_limit
-from api.config import init_config, get_config
 from api.user_manager import UserManager
-from playbooks.playbook_model import PlaybookManager
 from playbooks.playbook_executor import PlaybookExecutor
+from playbooks.playbook_model import PlaybookManager
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +41,11 @@ app.config['SECRET_KEY'] = config.get('JWT_SECRET_KEY')
 # Setup middleware
 setup_middleware(app)
 
-# Register authentication / user-management routes
-from api.auth_routes import auth_bp
+# Register authentication / user-management routes. Imported here rather than
+# at the top of the file because api.auth_routes imports back from this
+# module's app context; moving it up creates a circular import.
+from api.auth_routes import auth_bp  # noqa: E402
+
 app.register_blueprint(auth_bp)
 
 # Ensure a bootstrap admin exists on first start (empty users table)
@@ -74,9 +81,17 @@ class AlertService:
                 conn.commit()
     
     def _get_connection(self) -> sqlite3.Connection:
-        """Get database connection"""
-        conn = sqlite3.connect(self.db_path)
+        """Get database connection.
+
+        WAL + a busy timeout because the API and the log ingestor run as
+        separate processes against this same file (see docker-compose.yml);
+        the default journal mode makes concurrent writes fail with
+        "database is locked".
+        """
+        conn = sqlite3.connect(self.db_path, timeout=15)
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=15000")
         return conn
     
     def create_alert(self, alert_data: Dict) -> str:
@@ -824,6 +839,7 @@ def health_check():
 
 if __name__ == '__main__':
     import ssl
+
     from api.config import ConfigurationError
 
     # Get configuration
@@ -838,13 +854,13 @@ if __name__ == '__main__':
             config.validate_production()
         except ConfigurationError as e:
             print(f"✗ {e}")
-            raise SystemExit(1)
+            raise SystemExit(1) from e
 
     try:
         config.ensure_ssl_certificates()
     except ConfigurationError as e:
         print(f"✗ {e}")
-        raise SystemExit(1)
+        raise SystemExit(1) from e
 
     # SSL/TLS context
     ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
@@ -853,10 +869,10 @@ if __name__ == '__main__':
         keyfile=config.get('SSL_API_KEY_PATH')
     )
     
-    print(f"\n🍯 Honeypot Framework - Alert API Server")
+    print("\n🍯 Honeypot Framework - Alert API Server")
     print(f"📍 Starting on {host}:{port}")
-    print(f"🔐 SSL/TLS enabled")
-    print(f"\n✓ Ready to accept connections")
+    print("🔐 SSL/TLS enabled")
+    print("\n✓ Ready to accept connections")
     
     # Run server
     app.run(

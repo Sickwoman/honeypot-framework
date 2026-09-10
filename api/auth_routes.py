@@ -9,18 +9,18 @@
 
 from datetime import datetime
 
-from flask import Blueprint, request, jsonify, g
+from flask import Blueprint, g, jsonify, request
 
 from api.auth import (
-    jwt_manager,
-    api_key_manager,
-    login_required,
     TOKEN_EXPIRATION_HOURS,
+    api_key_manager,
+    jwt_manager,
+    login_required,
 )
 from api.decorators import require_permission
-from api.rbac import Permission
-from api.user_manager import UserManager, UserError
 from api.middleware import AuditLogger, rate_limit
+from api.rbac import Permission
+from api.user_manager import UserError, UserManager
 
 auth_bp = Blueprint("auth", __name__)
 

@@ -257,7 +257,7 @@ curl https://localhost:8443/api/v1/alerts/statistics \
 - `docs/WEEK1-2-IMPLEMENTATION.md` - **Deployment guide (START HERE)**
 - `docs/architecture.md` - System architecture
 - `docs/IMPROVEMENTS-AND-FEATURES.md` - 20 feature improvements with effort estimates
-- `docs/setup-guide.md` - General setup
+- `docs/SETUP.md` - General setup
 - `docs/SECURITY-HARDENING.md` - Security best practices
 
 ### New Docs to Create

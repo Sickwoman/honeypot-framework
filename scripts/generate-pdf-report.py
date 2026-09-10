@@ -5,22 +5,29 @@
 # Generates professional PDF reports from analytics data
 ################################################################################
 
-import json
-from datetime import datetime, timedelta
 import argparse
+from datetime import datetime
 
 try:
-    from reportlab.lib.pagesizes import letter, A4
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.units import inch
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
     from reportlab.lib import colors
-    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+    from reportlab.lib.enums import TA_CENTER
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import inch
+    from reportlab.platypus import (
+        PageBreak,
+        Paragraph,
+        SimpleDocTemplate,
+        Spacer,
+        Table,
+        TableStyle,
+    )
 except ImportError:
     print("❌ reportlab not installed. Install with: pip3 install reportlab")
     exit(1)
 
 import es_client
+
 
 class PDFReportGenerator:
     def __init__(self, es_host=None, username=None, password=None):
@@ -157,7 +164,7 @@ class PDFReportGenerator:
         date_text = Paragraph(
             f"<b>Report Date:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}<br/>" +
             f"<b>Analysis Period:</b> Last {days} day(s)<br/>" +
-            f"<b>Status:</b> <font color='green'>Active Monitoring</font>",
+            "<b>Status:</b> <font color='green'>Active Monitoring</font>",
             self.styles['Normal']
         )
         story.append(date_text)

@@ -5,16 +5,17 @@
 # Handles API authentication, token generation, and validation
 ################################################################################
 
-import os
-import jwt
-import json
 import hashlib
+import json
+import os
 import secrets
 import sqlite3
 from datetime import datetime, timedelta
-from typing import Dict, Optional, Tuple
 from functools import wraps
-from flask import request, jsonify, g
+from typing import Dict, Tuple
+
+import jwt
+from flask import g, jsonify, request
 
 # Configuration
 SECRET_KEY = os.getenv("JWT_SECRET_KEY")
@@ -78,7 +79,7 @@ class JWTManager:
             token = jwt.encode(payload, self.secret_key, algorithm=self.algorithm)
             return token
         except Exception as e:
-            raise AuthenticationError(f"Failed to generate token: {str(e)}")
+            raise AuthenticationError(f"Failed to generate token: {str(e)}") from e
     
     def validate_token(self, token: str) -> Dict:
         """
@@ -104,9 +105,9 @@ class JWTManager:
             )
             return payload
         except jwt.ExpiredSignatureError:
-            raise AuthenticationError("Token has expired")
+            raise AuthenticationError("Token has expired") from None
         except jwt.InvalidTokenError as e:
-            raise AuthenticationError(f"Invalid token: {str(e)}")
+            raise AuthenticationError(f"Invalid token: {str(e)}") from e
     
     def refresh_token(self, token: str, expiration_hours: int = TOKEN_EXPIRATION_HOURS) -> str:
         """
@@ -298,7 +299,7 @@ def resolve_request_identity():
     try:
         token = auth_header.split(" ")[1]
     except IndexError:
-        raise AuthenticationError("Invalid authorization header")
+        raise AuthenticationError("Invalid authorization header") from None
 
     payload = jwt_manager.validate_token(token)
     g.user_id = payload["sub"]

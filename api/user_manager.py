@@ -9,11 +9,11 @@
 # AlertService, and the same schema bootstrap.
 ################################################################################
 
-import os
-import uuid
 import logging
+import os
 import secrets
 import sqlite3
+import uuid
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
@@ -57,8 +57,11 @@ class UserManager:
                 conn.commit()
 
     def _get_connection(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
+        # WAL + busy timeout: the API and ingestor processes share this file.
+        conn = sqlite3.connect(self.db_path, timeout=15)
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=15000")
         return conn
 
     # ------------------------------------------------------------------ #
@@ -104,7 +107,7 @@ class UserManager:
                 )
                 conn.commit()
         except sqlite3.IntegrityError as e:
-            raise UserError(f"user already exists: {e}")
+            raise UserError(f"user already exists: {e}") from e
 
         return user_id
 

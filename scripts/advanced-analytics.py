@@ -5,14 +5,14 @@
 # Analyze attack trends and export data
 ################################################################################
 
-import requests
-import json
 import csv
-from datetime import datetime, timedelta
-import pandas as pd
-import os
+import json
+from datetime import datetime
 
 import es_client
+import pandas as pd
+import requests
+
 
 class AdvancedAnalytics:
     def __init__(self, es_url=None, username=None, password=None):

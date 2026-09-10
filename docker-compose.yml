@@ -1,0 +1,161 @@
+# Honeypot Framework - full local stack.
+#
+#   docker compose up --build          core loop (honeypot -> ingestor -> API -> dashboard)
+#   docker compose --profile elk up    also start Elasticsearch/Kibana/Logstash
+#
+# The core loop deliberately does NOT require Elasticsearch: alerts are stored
+# in SQLite by api/alerts_service.py, and only the reporting/analytics scripts
+# in scripts/ talk to Elasticsearch. Keeping ELK optional makes first run fast.
+#
+# See docs/QUICKSTART.md for the walkthrough.
+
+name: honeypot-framework
+
+services:
+  # ----------------------------------------------------------------------- #
+  # The trap. Real Cowrie SSH honeypot; its log is the ingestor's input.
+  # ----------------------------------------------------------------------- #
+  cowrie:
+    image: cowrie/cowrie:latest
+    restart: unless-stopped
+    ports:
+      # Host 2222 -> Cowrie's SSH. Point attack traffic (or
+      # scripts/simulate-attacks.sh) here.
+      - "${COWRIE_PORT:-2222}:2222"
+    volumes:
+      # Cowrie writes cowrie.log (text, read by the ingestor) and cowrie.json
+      # (structured, read by Logstash under the elk profile) here.
+      - cowrie-logs:/cowrie/cowrie-git/var/log/cowrie
+
+  # ----------------------------------------------------------------------- #
+  # Alert API + RBAC. Reads/writes the shared SQLite alert store.
+  # ----------------------------------------------------------------------- #
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    restart: unless-stopped
+    environment:
+      # Required -- api/auth.py refuses to start without it.
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?set JWT_SECRET_KEY in .env (see .env.example)}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      # If blank, a random password is generated and printed once in the logs:
+      #   docker compose logs api | grep -i password
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      ALERTS_DB_PATH: /var/lib/honeypot/alerts.db
+      LOG_DIR: /var/log/honeypot
+      API_DEBUG: "false"
+      API_RATE_LIMIT: ${API_RATE_LIMIT:-1000}
+      ABUSEIPDB_API_KEY: ${ABUSEIPDB_API_KEY:-}
+      VT_API_KEY: ${VT_API_KEY:-}
+    volumes:
+      - honeypot-data:/var/lib/honeypot
+      - honeypot-logs:/var/log/honeypot
+    expose:
+      - "8000"
+    ports:
+      # Exposed for curl/scripting; the dashboard reaches it via nginx.
+      - "${API_PORT:-8000}:8000"
+
+  # ----------------------------------------------------------------------- #
+  # Tails the honeypot log and turns events into alerts (which in turn fire
+  # matching playbooks). Same image as the API, different command.
+  # ----------------------------------------------------------------------- #
+  ingestor:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    restart: unless-stopped
+    command: ["python", "-m", "monitoring.live_alert_ingestor"]
+    environment:
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?set JWT_SECRET_KEY in .env (see .env.example)}
+      ALERTS_DB_PATH: /var/lib/honeypot/alerts.db
+      LOG_DIR: /var/log/honeypot
+      HONEYPOT_LOG_PATHS: /honeypot-logs/cowrie.log
+      # Wait for Cowrie to create the log rather than exiting immediately.
+      INGESTOR_WAIT_FOR_LOGS: "true"
+      # Start at EOF so a restart doesn't replay the whole log as new alerts.
+      INGESTOR_READ_FROM_START: "false"
+      ABUSEIPDB_API_KEY: ${ABUSEIPDB_API_KEY:-}
+      VT_API_KEY: ${VT_API_KEY:-}
+    volumes:
+      - honeypot-data:/var/lib/honeypot
+      - honeypot-logs:/var/log/honeypot
+      - cowrie-logs:/honeypot-logs:ro
+    depends_on:
+      - api
+
+  # ----------------------------------------------------------------------- #
+  # Nightwatch dashboard (nginx serving the built Vite app + API proxy).
+  # ----------------------------------------------------------------------- #
+  dashboard:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${DASHBOARD_PORT:-8080}:80"
+    depends_on:
+      - api
+
+  # ----------------------------------------------------------------------- #
+  # Optional ELK stack:  docker compose --profile elk up
+  # ----------------------------------------------------------------------- #
+  elasticsearch:
+    profiles: ["elk"]
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.10.0
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=true
+      - ELASTIC_PASSWORD=${ELASTICSEARCH_PASSWORD:?set ELASTICSEARCH_PASSWORD in .env to use the elk profile}
+      # Local single-node dev: skip cert setup, but keep auth on so the
+      # scripts' credentials are exercised the same way as in production.
+      - xpack.security.http.ssl.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -u elastic:$${ELASTIC_PASSWORD} http://localhost:9200/_cluster/health || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  kibana:
+    profiles: ["elk"]
+    image: docker.elastic.co/kibana/kibana:8.10.0
+    restart: unless-stopped
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - ELASTICSEARCH_USERNAME=kibana_system
+      - ELASTICSEARCH_PASSWORD=${KIBANA_SYSTEM_PASSWORD:-}
+    ports:
+      - "5601:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
+  logstash:
+    profiles: ["elk"]
+    image: docker.elastic.co/logstash/logstash:8.10.0
+    restart: unless-stopped
+    volumes:
+      - ./config/logstash-secure.conf:/usr/share/logstash/pipeline/logstash.conf:ro
+      # Mounted at the path the pipeline config expects, so the same config
+      # works for both container and native (/home/cowrie/...) deployments.
+      - cowrie-logs:/home/cowrie/cowrie/var/log/cowrie:ro
+    environment:
+      - LOGSTASH_ES_PASSWORD=${ELASTICSEARCH_PASSWORD:-}
+      - LOGSTASH_PASSWORD=${ELASTICSEARCH_PASSWORD:-}
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
+volumes:
+  cowrie-logs:
+  honeypot-data:
+  honeypot-logs:
+  elasticsearch-data:

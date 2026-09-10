@@ -1,0 +1,40 @@
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+exclude = [
+    "frontend/node_modules",
+    "terraform",
+    ".pytest_cache",
+]
+
+[tool.ruff.lint]
+# Real bugs (F), import hygiene (I), obvious mistakes (E), bugbears (B).
+# The UP (pyupgrade) rules are deliberately excluded: they'd rewrite ~270
+# typing annotations (Dict -> dict) across the repo for no behavioral gain.
+select = ["E4", "E7", "E9", "F", "I", "B"]
+ignore = [
+    "E501",   # line length: handled by the formatter, not worth churning docs-heavy files
+    "B008",   # function call in default arg: common and harmless in this codebase
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Scripts are run directly and legitimately import after sys.path setup.
+"scripts/*" = ["E402"]
+"tests/*" = ["E402"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Quieten the sqlite3 datetime adapter deprecation until timestamps are
+# migrated to explicit ISO strings.
+filterwarnings = [
+    "ignore::DeprecationWarning:sqlite3",
+]
+
+[tool.mypy]
+python_version = "3.11"
+# Deliberately permissive for now: the route layer and notifier/ML scripts have
+# no annotations yet. Tighten module-by-module as hints are added.
+ignore_missing_imports = true
+check_untyped_defs = false
+warn_unused_ignores = true
+exclude = "(frontend|terraform|\\.pytest_cache)"

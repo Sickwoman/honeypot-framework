@@ -5,16 +5,16 @@
 # Automates incident response with YAML-defined playbooks
 ################################################################################
 
+import logging
 import os
 import re
-import yaml
-import json
 import uuid
-import logging
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, List, Any, Optional, Tuple
 from enum import Enum
-from dataclasses import dataclass, field, asdict
+from typing import Any, Dict, List, Optional, Tuple
+
+import yaml
 
 # Configure logging
 logging.basicConfig(
@@ -145,9 +145,9 @@ class PlaybookSchema:
         errors = []
         
         # Check required fields
-        for field in PlaybookSchema.REQUIRED_FIELDS:
-            if field not in playbook_dict:
-                errors.append(f"Missing required field: {field}")
+        for field_name in PlaybookSchema.REQUIRED_FIELDS:
+            if field_name not in playbook_dict:
+                errors.append(f"Missing required field: {field_name}")
         
         if errors:
             return False, errors

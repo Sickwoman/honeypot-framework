@@ -5,27 +5,43 @@
 # Rate limiting, request logging, and security headers
 ################################################################################
 
+import logging
 import os
 import time
-import logging
-from datetime import datetime, timedelta
-from functools import wraps
-from typing import Dict
 from collections import defaultdict
-from flask import request, jsonify, g
+from datetime import datetime
+from functools import wraps
 
-# Configure logging
+from flask import g, jsonify, request
+
+# Configure logging.
+#
+# File logging is best-effort: importing this module must never fail just
+# because the log directory isn't writable. LOG_DIR defaults to a root-owned
+# path, so an unprivileged run (CI, a dev checkout, a non-root container)
+# would otherwise be unable to import the API at all. Fall back to stderr.
 _LOG_DIR = os.getenv('LOG_DIR', '/var/log/honeypot')
-os.makedirs(_LOG_DIR, exist_ok=True)
+_handlers = [logging.StreamHandler()]
+_log_dir_error = None
+
+try:
+    os.makedirs(_LOG_DIR, exist_ok=True)
+    _handlers.append(logging.FileHandler(os.path.join(_LOG_DIR, 'api-requests.log')))
+except OSError as exc:
+    _log_dir_error = exc
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(os.path.join(_LOG_DIR, 'api-requests.log')),
-        logging.StreamHandler()
-    ]
+    handlers=_handlers
 )
 logger = logging.getLogger(__name__)
+
+if _log_dir_error is not None:
+    logger.warning(
+        "Request logs go to stderr only: cannot write to LOG_DIR=%s (%s)",
+        _LOG_DIR, _log_dir_error,
+    )
 
 
 class RateLimiter:
@@ -212,8 +228,8 @@ class AuditLogger:
         audit_logger.info(audit_entry)
 
         try:
-            import sqlite3
             import json
+            import sqlite3
             conn = sqlite3.connect(self._get_db_path())
             try:
                 conn.execute(
@@ -281,16 +297,9 @@ def rate_limit(max_requests: int = None, window_seconds: int = None):
                     "retry_after": window_seconds or 3600
                 }), 429
             
-            # Add rate limit headers
-            remaining = limiter.get_remaining(client_id)
-            response = f(*args, **kwargs)
-            if isinstance(response, tuple):
-                response, status_code = response
-                # Add headers
-                if isinstance(response, dict):
-                    pass  # Can't add headers to dict
-            
-            return response
+            # X-RateLimit-* headers are added centrally in setup_middleware()'s
+            # after_request hook, which has the real response object.
+            return f(*args, **kwargs)
         
         return decorated_function
     return decorator
@@ -305,12 +314,8 @@ def log_request_response(f):
         try:
             response = f(*args, **kwargs)
             
-            # Extract response details
-            if isinstance(response, tuple):
-                data, status_code = response
-            else:
-                data = response
-                status_code = 200
+            # Extract the status code; the body itself isn't logged.
+            status_code = response[1] if isinstance(response, tuple) else 200
             
             # Log request
             duration = time.time() - start_time

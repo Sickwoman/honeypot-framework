@@ -5,14 +5,14 @@
 # Check IP reputation and enrich honeypot logs with threat intelligence
 ################################################################################
 
-import requests
-import json
+import argparse
 import sys
 import time
-from datetime import datetime, timedelta
-import argparse
+from datetime import datetime
 
 import es_client
+import requests
+
 
 class AbuseIPDBChecker:
     def __init__(self, api_key=None):
@@ -139,13 +139,13 @@ class AbuseIPDBChecker:
         print(f"Total Reports: {result['total_reports']}")
         print(f"Last Reported: {result['last_reported']}")
         
-        print(f"\n📍 Location & Network:")
+        print("\n📍 Location & Network:")
         print(f"  Country: {result['country']}")
         print(f"  ISP: {result['isp']}")
         print(f"  Domain: {result['domain']}")
         print(f"  Usage Type: {result['usage_type']}")
         
-        print(f"\n🚨 Flags:")
+        print("\n🚨 Flags:")
         print(f"  Whitelisted: {'✓ Yes' if result['is_whitelisted'] else '✗ No'}")
         print(f"  Blacklisted: {'✓ Yes' if result['is_blacklisted'] else '✗ No'}")
         

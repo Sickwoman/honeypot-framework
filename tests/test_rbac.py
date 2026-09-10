@@ -8,17 +8,17 @@ Covers:
 import pytest
 from flask import Flask, jsonify
 
-from api.rbac import (
-    Role,
-    Permission,
-    ROLE_PERMISSIONS,
-    is_valid_role,
-    permissions_for,
-    has_permission,
-    has_all_permissions,
-)
 from api.auth import jwt_manager
 from api.decorators import require_permission
+from api.rbac import (
+    ROLE_PERMISSIONS,
+    Permission,
+    Role,
+    has_all_permissions,
+    has_permission,
+    is_valid_role,
+    permissions_for,
+)
 
 
 # --------------------------------------------------------------------------- #

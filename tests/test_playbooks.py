@@ -1,15 +1,11 @@
 import json
 import os
-import tempfile
-
-import pytest
 
 from api import alerts_service as alerts_module
-from api.rbac import Permission, Role, ROLE_PERMISSIONS
+from api.rbac import ROLE_PERMISSIONS, Permission, Role
 from monitoring import live_alert_ingestor as monitoring_module
-from playbooks.playbook_model import PlaybookDefinition, PlaybookManager
 from playbooks.playbook_executor import PlaybookExecutor
-
+from playbooks.playbook_model import PlaybookDefinition, PlaybookManager
 
 VALID_PLAYBOOK = """
 id: brute-force-block
