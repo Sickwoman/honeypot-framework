@@ -14,18 +14,34 @@ from functools import wraps
 
 from flask import g, jsonify, request
 
-# Configure logging
+# Configure logging.
+#
+# File logging is best-effort: importing this module must never fail just
+# because the log directory isn't writable. LOG_DIR defaults to a root-owned
+# path, so an unprivileged run (CI, a dev checkout, a non-root container)
+# would otherwise be unable to import the API at all. Fall back to stderr.
 _LOG_DIR = os.getenv('LOG_DIR', '/var/log/honeypot')
-os.makedirs(_LOG_DIR, exist_ok=True)
+_handlers = [logging.StreamHandler()]
+_log_dir_error = None
+
+try:
+    os.makedirs(_LOG_DIR, exist_ok=True)
+    _handlers.append(logging.FileHandler(os.path.join(_LOG_DIR, 'api-requests.log')))
+except OSError as exc:
+    _log_dir_error = exc
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(os.path.join(_LOG_DIR, 'api-requests.log')),
-        logging.StreamHandler()
-    ]
+    handlers=_handlers
 )
 logger = logging.getLogger(__name__)
+
+if _log_dir_error is not None:
+    logger.warning(
+        "Request logs go to stderr only: cannot write to LOG_DIR=%s (%s)",
+        _LOG_DIR, _log_dir_error,
+    )
 
 
 class RateLimiter:
