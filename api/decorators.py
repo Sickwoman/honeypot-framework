@@ -13,24 +13,14 @@ from flask import g, jsonify
 from api.auth import (
     resolve_request_identity,
     AuthenticationError,
-    # Re-exported for back-compat so callers can import all guards from one place.
-    require_auth,
+    # Re-exported so callers can import all guards from one place.
     login_required,
-    admin_required,
-    analyst_required,
-    responder_required,
-    observer_required,
 )
 from api.rbac import has_permission
 
 __all__ = [
     "require_permission",
-    "require_auth",
     "login_required",
-    "admin_required",
-    "analyst_required",
-    "responder_required",
-    "observer_required",
 ]
 
 

@@ -7,15 +7,22 @@
 
 import os
 import jwt
+import json
 import hashlib
 import secrets
+import sqlite3
 from datetime import datetime, timedelta
 from typing import Dict, Optional, Tuple
 from functools import wraps
 from flask import request, jsonify, g
 
 # Configuration
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "change_me_in_production")
+SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError(
+        "JWT_SECRET_KEY is not set. Refusing to start with no JWT signing "
+        "secret -- set it in .env (see .env.example) or the environment."
+    )
 ALGORITHM = "HS256"
 TOKEN_EXPIRATION_HOURS = int(os.getenv("TOKEN_EXPIRATION_HOURS", 24))
 API_KEY_LENGTH = 32
@@ -126,35 +133,51 @@ class JWTManager:
 
 
 class APIKeyManager:
-    """Manage API keys for service-to-service authentication"""
-    
-    def __init__(self):
-        # In production, store API keys in encrypted database
-        self.api_keys = {}  # Format: {api_key: {user_id, username, roles, created_at, expires_at}}
-    
+    """Manage API keys for service-to-service authentication.
+
+    Keys are stored hashed in the `api_keys` table (database/schema.sql) so
+    they survive restarts and are visible to every API worker process.
+    """
+
+    def __init__(self, db_path: str = None):
+        self._db_path = db_path
+
+    def _get_connection(self) -> sqlite3.Connection:
+        db_path = self._db_path
+        if not db_path:
+            # Resolved lazily so this class can be instantiated at import
+            # time, before api.config.init_config() runs.
+            from api.config import get_config
+            db_path = get_config().get("ALERTS_DB_PATH")
+
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    @staticmethod
+    def _hash(api_key: str) -> str:
+        return hashlib.sha256(api_key.encode()).hexdigest()
+
     def generate_api_key(self, user_id: str, username: str, roles: list = None,
                         expires_in_days: int = 90) -> Tuple[str, Dict]:
         """
         Generate API key
-        
+
         Args:
             user_id: User identifier
             username: Username
             roles: List of roles
             expires_in_days: Expiration in days
-            
+
         Returns:
             Tuple of (api_key, key_info)
         """
         if roles is None:
             roles = []
-        
-        # Generate random API key
+
         api_key = f"hf_api_{secrets.token_urlsafe(24)}"
-        
-        # Hash for storage
-        key_hash = hashlib.sha256(api_key.encode()).hexdigest()
-        
+        key_hash = self._hash(api_key)
+
         key_info = {
             "user_id": user_id,
             "username": username,
@@ -164,53 +187,77 @@ class APIKeyManager:
             "last_used": None,
             "revoked": False
         }
-        
-        self.api_keys[key_hash] = key_info
-        
+
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO api_keys
+                    (key_hash, user_id, username, roles, created_at, expires_at, revoked)
+                VALUES (?, ?, ?, ?, ?, ?, 0)
+                """,
+                (key_hash, user_id, username, json.dumps(roles),
+                 key_info["created_at"].isoformat(), key_info["expires_at"].isoformat()),
+            )
+            conn.commit()
+
         return api_key, key_info
-    
+
     def validate_api_key(self, api_key: str) -> Dict:
         """
         Validate API key
-        
+
         Args:
             api_key: API key string
-            
+
         Returns:
             Key information if valid
-            
+
         Raises:
             AuthenticationError: If key is invalid
         """
-        key_hash = hashlib.sha256(api_key.encode()).hexdigest()
-        
-        if key_hash not in self.api_keys:
-            raise AuthenticationError("Invalid API key")
-        
-        key_info = self.api_keys[key_hash]
-        
-        # Check expiration
-        if key_info["expires_at"] < datetime.utcnow():
-            raise AuthenticationError("API key has expired")
-        
-        # Check revocation
-        if key_info["revoked"]:
-            raise AuthenticationError("API key has been revoked")
-        
-        # Update last used
-        key_info["last_used"] = datetime.utcnow()
-        
-        return key_info
-    
+        key_hash = self._hash(api_key)
+
+        with self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM api_keys WHERE key_hash = ?", (key_hash,)
+            ).fetchone()
+
+            if row is None:
+                raise AuthenticationError("Invalid API key")
+
+            if row["revoked"]:
+                raise AuthenticationError("API key has been revoked")
+
+            expires_at = datetime.fromisoformat(row["expires_at"])
+            if expires_at < datetime.utcnow():
+                raise AuthenticationError("API key has expired")
+
+            last_used = datetime.utcnow()
+            conn.execute(
+                "UPDATE api_keys SET last_used = ? WHERE key_hash = ?",
+                (last_used.isoformat(), key_hash),
+            )
+            conn.commit()
+
+        return {
+            "user_id": row["user_id"],
+            "username": row["username"],
+            "roles": json.loads(row["roles"] or "[]"),
+            "created_at": row["created_at"],
+            "expires_at": expires_at,
+            "last_used": last_used,
+            "revoked": False,
+        }
+
     def revoke_api_key(self, api_key: str) -> bool:
         """Revoke an API key"""
-        key_hash = hashlib.sha256(api_key.encode()).hexdigest()
-        
-        if key_hash not in self.api_keys:
-            return False
-        
-        self.api_keys[key_hash]["revoked"] = True
-        return True
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                "UPDATE api_keys SET revoked = 1 WHERE key_hash = ?",
+                (self._hash(api_key),),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
 
 
 # Initialize managers
@@ -260,131 +307,25 @@ def resolve_request_identity():
     g.auth_method = "jwt"
 
 
-def require_auth(required_roles: list = None):
-    """
-    Flask decorator for endpoint authentication
-
-    Args:
-        required_roles: List of roles required to access endpoint
-    """
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            try:
-                resolve_request_identity()
-
-                # Check required roles
-                if required_roles:
-                    user_roles = set(g.roles)
-                    required = set(required_roles)
-                    if not user_roles & required:
-                        return jsonify({"error": "Insufficient permissions"}), 403
-
-                return f(*args, **kwargs)
-
-            except AuthenticationError as e:
-                return jsonify({"error": str(e)}), 401
-            except Exception as e:
-                return jsonify({"error": "Authentication failed"}), 401
-
-        return decorated_function
-    return decorator
-
-
 def login_required(f):
-    """Simple authentication decorator (requires authentication but no specific role)"""
-    return require_auth()(f)
+    """Flask decorator requiring authentication only (no specific
+    permission) -- for endpoints like /auth/whoami and /auth/refresh that
+    any authenticated user may call. Endpoints that need authorization
+    should use api.decorators.require_permission against the RBAC matrix
+    in api/rbac.py instead of a role name, so there's a single place
+    (ROLE_PERMISSIONS) that governs what each role can do."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        try:
+            resolve_request_identity()
+            return f(*args, **kwargs)
+        except AuthenticationError as e:
+            return jsonify({"error": str(e)}), 401
+        except Exception:
+            return jsonify({"error": "Authentication failed"}), 401
+
+    return decorated_function
 
 
-def admin_required(f):
-    """Decorator requiring admin role"""
-    return require_auth(required_roles=["admin"])(f)
-
-
-def analyst_required(f):
-    """Decorator requiring analyst role"""
-    return require_auth(required_roles=["analyst", "admin"])(f)
-
-
-def responder_required(f):
-    """Decorator requiring responder role"""
-    return require_auth(required_roles=["responder", "admin"])(f)
-
-
-def observer_required(f):
-    """Decorator requiring at least observer role (any authenticated role,
-    since observer is the lowest tier)."""
-    return require_auth(required_roles=["observer", "analyst", "responder", "admin"])(f)
-
-
-# ============================================================================
-# Example Flask Application Usage
-# ============================================================================
-
-if __name__ == "__main__":
-    from flask import Flask
-    
-    app = Flask(__name__)
-    app.secret_key = SECRET_KEY
-    
-    # Test endpoints
-    @app.route("/auth/login", methods=["POST"])
-    def login():
-        """Login endpoint - returns JWT token"""
-        data = request.get_json()
-        username = data.get("username")
-        password = data.get("password")
-        
-        # TODO: Validate credentials against database
-        # This is a placeholder
-        if username and password:
-            token = jwt_manager.generate_token(
-                user_id="user_123",
-                username=username,
-                roles=["analyst", "responder"]
-            )
-            return jsonify({
-                "token": token,
-                "expires_in": TOKEN_EXPIRATION_HOURS * 3600
-            })
-        
-        return jsonify({"error": "Invalid credentials"}), 401
-    
-    @app.route("/auth/refresh", methods=["POST"])
-    @login_required
-    def refresh():
-        """Refresh token endpoint"""
-        auth_header = request.headers.get("Authorization")
-        token = auth_header.split(" ")[1]
-        
-        new_token = jwt_manager.refresh_token(token)
-        return jsonify({
-            "token": new_token,
-            "expires_in": TOKEN_EXPIRATION_HOURS * 3600
-        })
-    
-    @app.route("/auth/api-key", methods=["POST"])
-    @login_required
-    def create_api_key():
-        """Create API key for service account"""
-        api_key, key_info = api_key_manager.generate_api_key(
-            user_id=g.user_id,
-            username=g.username,
-            roles=["service"]
-        )
-        
-        return jsonify({
-            "api_key": api_key,
-            "expires_at": key_info["expires_at"].isoformat()
-        })
-    
-    @app.route("/api/alerts", methods=["GET"])
-    @analyst_required
-    def get_alerts():
-        """Protected endpoint requiring analyst role"""
-        return jsonify({
-            "alerts": [],
-            "user": g.username
-        })
-    
-    print("Authentication module loaded successfully")
+# Real login/refresh/api-key/user-management endpoints are registered from
+# api/auth_routes.py (a Flask Blueprint) onto the app in api/alerts_service.py.

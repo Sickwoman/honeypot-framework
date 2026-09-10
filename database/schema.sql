@@ -259,7 +259,9 @@ CREATE TABLE IF NOT EXISTS users (
     
     -- Profile
     full_name TEXT,
-    role TEXT NOT NULL,                         -- Role: admin, analyst, responder, observer
+    -- Role vocabulary is enforced here as well as in api/rbac.py, so a write
+    -- that bypasses the app layer can't store an unknown role.
+    role TEXT NOT NULL CHECK(role IN ('admin', 'analyst', 'responder', 'observer')),
     
     -- Status
     enabled BOOLEAN DEFAULT 1,
@@ -280,6 +282,27 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+
+-- ################################################################################
+-- API KEYS TABLE
+-- ################################################################################
+-- Service-to-service API keys. Stored hashed (SHA-256 of the key) and shared
+-- across API worker processes -- an in-memory store would make a key minted on
+-- one worker fail validation on another, and lose every key on restart.
+
+CREATE TABLE IF NOT EXISTS api_keys (
+    key_hash TEXT PRIMARY KEY,                   -- SHA-256 of the issued key
+    user_id TEXT NOT NULL,                       -- Owning user
+    username TEXT,
+    roles TEXT,                                  -- JSON array of role names
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    expires_at DATETIME,
+    last_used DATETIME,
+    revoked BOOLEAN DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_api_keys_user_id ON api_keys(user_id);
+CREATE INDEX IF NOT EXISTS idx_api_keys_expires_at ON api_keys(expires_at);
 
 -- ################################################################################
 -- AUDIT LOG TABLE

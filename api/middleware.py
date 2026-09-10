@@ -15,11 +15,13 @@ from collections import defaultdict
 from flask import request, jsonify, g
 
 # Configure logging
+_LOG_DIR = os.getenv('LOG_DIR', '/var/log/honeypot')
+os.makedirs(_LOG_DIR, exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('/var/log/honeypot/api-requests.log'),
+        logging.FileHandler(os.path.join(_LOG_DIR, 'api-requests.log')),
         logging.StreamHandler()
     ]
 )
@@ -159,14 +161,25 @@ class RequestLogger:
 
 
 class AuditLogger:
-    """Log sensitive operations for audit trail"""
-    
-    @staticmethod
-    def log_operation(operation: str, resource_type: str, resource_id: str,
+    """Log sensitive operations for audit trail (Python logger + the
+    ``audit_log`` DB table in database/schema.sql)."""
+
+    def __init__(self, db_path: str = None):
+        self._db_path = db_path
+
+    def _get_db_path(self) -> str:
+        if self._db_path:
+            return self._db_path
+        # Resolved lazily (not in __init__) so this class can be
+        # instantiated at import time, before api.config.init_config() runs.
+        from api.config import get_config
+        return get_config().get('ALERTS_DB_PATH')
+
+    def log_operation(self, operation: str, resource_type: str, resource_id: str,
                      action: str, user_id: str, status: str, details: dict = None):
         """
         Log audit event
-        
+
         Args:
             operation: Operation type (e.g., "alert_acknowledged")
             resource_type: Type of resource (e.g., "alert", "incident")
@@ -176,6 +189,13 @@ class AuditLogger:
             status: Success/failure status
             details: Additional details
         """
+        try:
+            ip_address = request.remote_addr if request else "system"
+            user_agent = request.headers.get("User-Agent") if request else None
+        except RuntimeError:
+            ip_address = "system"
+            user_agent = None
+
         audit_entry = {
             "timestamp": datetime.utcnow().isoformat(),
             "operation": operation,
@@ -184,13 +204,39 @@ class AuditLogger:
             "action": action,
             "user_id": user_id,
             "status": status,
-            "ip_address": request.remote_addr if request else "system",
+            "ip_address": ip_address,
             "details": details or {}
         }
-        
+
         audit_logger = logging.getLogger("audit")
         audit_logger.info(audit_entry)
-        
+
+        try:
+            import sqlite3
+            import json
+            conn = sqlite3.connect(self._get_db_path())
+            try:
+                conn.execute(
+                    """
+                    INSERT INTO audit_log
+                        (user_id, action, resource_type, resource_id,
+                         description, ip_address, user_agent, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        user_id, action, resource_type, resource_id,
+                        json.dumps({"operation": operation, "status": status, "details": details or {}}),
+                        ip_address,
+                        user_agent,
+                        audit_entry["timestamp"],
+                    ),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+        except Exception:
+            logger.exception("Failed to persist audit log entry to database")
+
         return audit_entry
 
 
@@ -213,6 +259,13 @@ def rate_limit(max_requests: int = None, window_seconds: int = None):
         max_requests: Max requests for this endpoint
         window_seconds: Time window
     """
+    # Built once per decorated endpoint (not per request) so the request
+    # history actually persists across calls instead of resetting every time.
+    limiter = RateLimiter(
+        max_requests=max_requests or 100,
+        window_seconds=window_seconds or 3600
+    )
+
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
@@ -221,13 +274,7 @@ def rate_limit(max_requests: int = None, window_seconds: int = None):
                 client_id = g.user_id
             else:
                 client_id = request.remote_addr
-            
-            # Check rate limit
-            limiter = RateLimiter(
-                max_requests=max_requests or 100,
-                window_seconds=window_seconds or 3600
-            )
-            
+
             if limiter.is_rate_limited(client_id):
                 return jsonify({
                     "error": "Rate limit exceeded",
