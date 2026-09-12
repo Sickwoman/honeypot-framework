@@ -20,6 +20,7 @@ from typing import Dict, List, Optional
 import bcrypt
 
 from api.config import get_config
+from api.env import apply_schema
 from api.rbac import Role, is_valid_role
 
 logger = logging.getLogger(__name__)
@@ -49,12 +50,7 @@ class UserManager:
     def _ensure_database(self):
         """Create the DB (and the users table via schema.sql) if missing."""
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
-        schema_path = "database/schema.sql"
-        if os.path.exists(schema_path):
-            with sqlite3.connect(self.db_path) as conn:
-                with open(schema_path, "r") as f:
-                    conn.executescript(f.read())
-                conn.commit()
+        apply_schema(self.db_path)
 
     def _get_connection(self) -> sqlite3.Connection:
         # WAL + busy timeout: the API and ingestor processes share this file.

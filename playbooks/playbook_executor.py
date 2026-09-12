@@ -12,6 +12,7 @@ import sqlite3
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+from api.env import PROJECT_ROOT
 from playbooks.action_handlers import ActionFactory
 from playbooks.playbook_model import (
     ActionResult,
@@ -22,18 +23,36 @@ from playbooks.playbook_model import (
     PlaybookStatus,
 )
 
-# Configure logging
-log_dir = os.path.join(os.getcwd(), 'logs')
-os.makedirs(log_dir, exist_ok=True)
+# Configure logging.
+#
+# Best-effort file logging, mirroring api/middleware.py: importing this module
+# must never fail because a log directory isn't writable -- the API imports it
+# at startup, so a crash here takes the whole service down. This used to write
+# to ./logs relative to the current working directory, which scattered logs
+# wherever the process happened to be launched from and raised PermissionError
+# outside the repo.
+_LOG_DIR = os.getenv('LOG_DIR', '/var/log/honeypot')
+_handlers = [logging.StreamHandler()]
+_log_dir_error = None
+
+try:
+    os.makedirs(_LOG_DIR, exist_ok=True)
+    _handlers.append(logging.FileHandler(os.path.join(_LOG_DIR, 'playbook-execution.log')))
+except OSError as exc:
+    _log_dir_error = exc
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(os.path.join(log_dir, 'playbook-execution.log')),
-        logging.StreamHandler()
-    ]
+    handlers=_handlers
 )
 logger = logging.getLogger(__name__)
+
+if _log_dir_error is not None:
+    logger.warning(
+        "Playbook logs go to stderr only: cannot write to LOG_DIR=%s (%s)",
+        _LOG_DIR, _log_dir_error,
+    )
 
 
 class PlaybookExecutor:
@@ -48,7 +67,7 @@ class PlaybookExecutor:
             db_path: Path to SQLite database for storing executions
         """
         self.playbook_manager = playbook_manager
-        self.db_path = db_path or os.path.join(os.getcwd(), 'data', 'alerts.db')
+        self.db_path = db_path or str(PROJECT_ROOT / 'data' / 'alerts.db')
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         self.executions: Dict[str, PlaybookExecution] = {}
         self._create_execution_table()

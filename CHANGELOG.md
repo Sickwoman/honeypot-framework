@@ -52,6 +52,24 @@ What has actually shipped, newest first. Roadmap and open work live in
 - All 435 ruff findings, including a `dataclasses.field` import shadowed by a
   loop variable, dead code in the rate-limit decorator, bare excepts, and nine
   exception re-raises that dropped the original cause.
+- **`.env` was silently ignored unless you ran from the repo root.** `api/auth.py`
+  reads `JWT_SECRET_KEY` from `os.environ` at import time, before anything
+  loads `.env` — and `ConfigManager` resolved `.env` and `database/schema.sql`
+  relative to the current working directory, not the repo. Following the
+  Quickstart's `cp .env.example .env` and then running the API from anywhere
+  else raised `JWT_SECRET_KEY is not set` or `no such table: users` with no
+  clue why. Added `api/env.py`, which loads the repo-root `.env` on import of
+  `api.auth`, and made every schema/data path (`database/schema.sql`,
+  `playbooks/`, the default alerts DB) resolve from the repo root regardless
+  of cwd.
+- **A real environment variable was silently overridden by `.env`.** `.env`
+  loaded with `override=True`, so e.g. an explicitly-exported `ALERTS_DB_PATH`
+  was discarded in favor of `.env`'s default and the API wrote to
+  `/var/lib/honeypot/alerts.db` anyway, with no warning. `.env` now only fills
+  in what isn't already set.
+- `playbooks/playbook_executor.py` crashed on import if `./logs` (relative to
+  the current working directory) wasn't writable — the same class of bug
+  already fixed in `api/middleware.py`. Now best-effort, like the API logger.
 
 ### Security
 - **Command injection in the auto-response playbook.** `BlockIPHandler` built

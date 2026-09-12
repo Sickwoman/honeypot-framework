@@ -17,6 +17,10 @@ from typing import Dict, Tuple
 import jwt
 from flask import g, jsonify, request
 
+# Populates os.environ from the repo-root .env before the check below, so the
+# documented "set JWT_SECRET_KEY in .env" flow works outside Docker too.
+import api.env  # noqa: F401  (imported for its side effect)
+
 # Configuration
 SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 if not SECRET_KEY:
