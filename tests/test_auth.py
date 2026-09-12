@@ -25,10 +25,17 @@ REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 # --------------------------------------------------------------------------- #
 # JWT signing secret
 # --------------------------------------------------------------------------- #
-def test_auth_module_refuses_to_import_without_jwt_secret():
-    """No hardcoded fallback secret: importing must fail loudly instead."""
+def test_auth_module_refuses_to_import_without_jwt_secret(tmp_path):
+    """No hardcoded fallback secret: importing must fail loudly instead.
+
+    api/env.py loads a repo-root .env on import (so JWT_SECRET_KEY can be set
+    there, not just in the real environment) -- point HONEYPOT_ENV_FILE at an
+    empty file that is guaranteed not to exist, so this test doesn't depend on
+    whether a real .env happens to be checked out on the machine running it.
+    """
     env = {k: v for k, v in os.environ.items() if k != "JWT_SECRET_KEY"}
     env["PYTHONPATH"] = REPO_ROOT
+    env["HONEYPOT_ENV_FILE"] = str(tmp_path / "no-such.env")
 
     result = subprocess.run(
         [sys.executable, "-c", "import api.auth"],

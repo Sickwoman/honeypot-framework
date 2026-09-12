@@ -4,7 +4,7 @@
 
 ## Overview
 
-This guide covers the implementation of all Week 1-2 improvements from the IMPROVEMENTS-AND-FEATURES.md document. These are critical security and operational enhancements.
+This guide covers the security and alert-infrastructure work delivered in the project's first phase. Remaining planned work is tracked in [ROADMAP.md](../ROADMAP.md); what has shipped is in [CHANGELOG.md](../CHANGELOG.md).
 
 ---
 

@@ -1,27 +1,15 @@
 import './style.css';
-
-type Severity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO';
-
-type Alert = {
-  id: string;
-  alert_name: string;
-  severity: Severity;
-  status: string;
-  source_ip?: string;
-  honeypot_type?: string;
-  service_name?: string;
-  description?: string;
-  first_seen?: string;
-  last_seen?: string;
-  created_at?: string;
-  threat_score?: number;
-  threat_level?: string;
-  acknowledged?: boolean;
-  metadata?: string | Record<string, unknown>;
-};
-
-type Playbook = { id: string; name: string; description?: string };
-type ReplayEvent = { label: string; detail: string; source: string; time: string };
+import {
+  buildAuthHeaders,
+  esc,
+  filterAlerts,
+  isValidApiUrl,
+  metadata,
+  relativeTime,
+  replayEvents,
+  severityClass,
+} from './lib';
+import type { Alert, Playbook, ReplayEvent } from './lib';
 
 const demoAlerts: Alert[] = [
   {
@@ -69,44 +57,12 @@ const state = {
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 
-function esc(value: unknown): string {
-  return String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]!);
-}
-
-function relativeTime(value?: string): string {
-  if (!value) return 'unknown';
-  const seconds = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 1000));
-  if (seconds < 60) return `${seconds}s ago`;
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-  return `${Math.floor(seconds / 3600)}h ago`;
-}
-
 function filteredAlerts(): Alert[] {
-  const query = state.search.toLowerCase();
-  return state.alerts.filter((alert) => {
-    const matchesSeverity = state.severity === 'ALL' || alert.severity === state.severity;
-    const haystack = `${alert.alert_name} ${alert.source_ip} ${alert.description} ${alert.service_name}`.toLowerCase();
-    return matchesSeverity && haystack.includes(query);
-  });
+  return filterAlerts(state.alerts, state.severity, state.search);
 }
 
 function selectedAlert(): Alert {
   return state.alerts.find((alert) => alert.id === state.selectedId) || state.alerts[0] || demoAlerts[0];
-}
-
-const SEVERITY_LEVELS = ['critical', 'high', 'medium', 'low', 'info'];
-
-// Rendered into a class attribute, so restrict it to the known vocabulary
-// rather than trusting whatever the backend put in severity/threat_level.
-function severityClass(severity?: string): string {
-  const level = String(severity ?? '').toLowerCase();
-  return `severity-${SEVERITY_LEVELS.includes(level) ? level : 'info'}`;
-}
-
-function metadata(alert: Alert): Record<string, unknown> {
-  if (!alert.metadata) return {};
-  if (typeof alert.metadata === 'object') return alert.metadata;
-  try { return JSON.parse(alert.metadata) as Record<string, unknown>; } catch { return {}; }
 }
 
 function graph(alert: Alert): string {
@@ -121,26 +77,6 @@ function graph(alert: Alert): string {
     <div class="graph-node target"><span>SERVICE</span><strong>${service}</strong></div>
     <div class="graph-pulse"></div>
   </div>`;
-}
-
-function replayEvents(alert: Alert): ReplayEvent[] {
-  const meta = metadata(alert);
-  if (Array.isArray(meta.events)) {
-    const events = meta.events as Array<Record<string, unknown>>;
-    return events.map((event, index) => ({
-      label: String(event.type || event.action || `event-${index + 1}`),
-      detail: String(event.command || event.path || event.detail || alert.description || 'Observed activity'),
-      source: String(event.source || alert.service_name || 'sensor'),
-      time: String(event.timestamp || alert.first_seen || ''),
-    }));
-  }
-  const phases = Array.isArray(meta.phases) ? meta.phases as string[] : ['reconnaissance', 'access', 'exploitation'];
-  return phases.map((phase, index) => ({
-    label: phase,
-    detail: index === 0 ? `Connection observed from ${alert.source_ip || 'unknown actor'}` : index === 1 ? `Access attempt against ${alert.service_name || 'exposed service'}` : alert.description || 'Payload behavior observed by the sensor',
-    source: alert.honeypot_type || 'sensor mesh',
-    time: alert.first_seen || '',
-  }));
 }
 
 function replayPanel(alert: Alert): string {
@@ -279,8 +215,7 @@ async function resolveIncident(): Promise<void> {
 }
 
 function authHeaders(): HeadersInit {
-  if (!state.token) return {};
-  return state.token.startsWith('Bearer ') ? { Authorization: state.token } : { 'X-API-Key': state.token };
+  return buildAuthHeaders(state.token);
 }
 
 function configureApi(): void {
@@ -292,7 +227,7 @@ function configureApi(): void {
     return;
   }
 
-  if (!/^(https?:\/\/|\/)/.test(url.trim())) {
+  if (!isValidApiUrl(url)) {
     window.alert('API URL must start with https://, http:// or /');
     return;
   }

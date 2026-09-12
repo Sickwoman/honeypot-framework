@@ -99,13 +99,16 @@ aws ec2 describe-instances --region us-east-1
 
 | Document | Purpose |
 |----------|---------|
-| [SETUP.md](docs/SETUP.md) | Installation and configuration guide |
+| [QUICKSTART.md](docs/QUICKSTART.md) | **Start here** — run the whole stack locally |
+| [SETUP.md](docs/SETUP.md) | Native installation and configuration |
 | [ARCHITECTURE.md](docs/architecture.md) | System design and components |
+| [RBAC-POLICY.md](docs/RBAC-POLICY.md) | Roles, permissions, endpoint mapping |
 | [PHASE2-DEPLOYMENT.md](docs/PHASE2-DEPLOYMENT.md) | AWS deployment guide |
-| [SYSTEMD-SERVICES.md](docs/SYSTEMD-SERVICES.md) | Service management |
 | [INCIDENT-RESPONSE-PLAYBOOK.md](docs/INCIDENT-RESPONSE-PLAYBOOK.md) | Attack response procedures |
-| [GEOIP-ENRICHMENT.md](docs/GEOIP-ENRICHMENT.md) | Location-based log enrichment |
 | [THREAT-INTELLIGENCE.md](docs/THREAT-INTELLIGENCE.md) | IP threat scoring integration |
+| [COMPLIANCE.md](docs/COMPLIANCE.md) | What the evidence reporter collects, and its limits |
+| [CHANGELOG.md](CHANGELOG.md) | What has shipped |
+| [ROADMAP.md](ROADMAP.md) | What's planned and what's still open |
 
 ## 🛠️ Tools & Scripts
 
@@ -207,7 +210,7 @@ Implemented:
 ✅ Duration-bounded automated firewall blocks (expiry job in cron)
 
 Not yet complete — see [SECURITY-CHECKLIST.md](SECURITY-CHECKLIST.md) and
-[IMPROVEMENTS-AND-FEATURES.md](IMPROVEMENTS-AND-FEATURES.md):
+[ROADMAP.md](ROADMAP.md):
 
 ⬜ End-to-end TLS across every component
 ⬜ Log encryption at rest (S3 SSE + CloudWatch retention policies)

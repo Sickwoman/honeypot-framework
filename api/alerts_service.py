@@ -18,6 +18,7 @@ from flask import Flask, g, jsonify, request
 
 from api.config import init_config
 from api.decorators import require_permission
+from api.env import PROJECT_ROOT, apply_schema
 from api.middleware import (
     AuditLogger,
     log_request_response,
@@ -71,14 +72,7 @@ class AlertService:
     def _ensure_database(self):
         """Create database if it doesn't exist"""
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
-        
-        # Load schema
-        schema_path = "database/schema.sql"
-        if os.path.exists(schema_path):
-            with sqlite3.connect(self.db_path) as conn:
-                with open(schema_path, 'r') as f:
-                    conn.executescript(f.read())
-                conn.commit()
+        apply_schema(self.db_path)
     
     def _get_connection(self) -> sqlite3.Connection:
         """Get database connection.
@@ -376,7 +370,7 @@ def enrich_alert_with_threat_intel(alert_data: Optional[Dict]) -> Optional[Dict]
 
 # Initialize alert service
 alert_service = AlertService()
-playbook_manager = PlaybookManager(os.path.join(os.getcwd(), 'playbooks'))
+playbook_manager = PlaybookManager(str(PROJECT_ROOT / 'playbooks'))
 playbook_executor = PlaybookExecutor(playbook_manager, db_path=alert_service.db_path)
 
 

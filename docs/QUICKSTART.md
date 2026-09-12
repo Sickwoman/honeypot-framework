@@ -90,16 +90,38 @@ curl -s http://localhost:8000/api/v1/alerts \
 
 ## Without Docker
 
-These work today with no containers:
+The API itself runs fine with no containers -- verified end to end (login,
+RBAC, alert creation, playbook loading) against a plain `python -m flask` /
+`app.run()` process:
 
 ```bash
 pip install -r requirements.txt -r requirements-dev.txt
-export JWT_SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
+cp .env.example .env
+python3 -c "import secrets; print('JWT_SECRET_KEY=' + secrets.token_urlsafe(32))" >> .env
 
-pytest                          # 63 tests
+pytest                          # 91 tests
 ruff check .                    # lint
-cd frontend && npm ci && npm run build
+cd frontend && npm ci && npm run build && npm test   # 31 tests
 ```
+
+To actually serve the API without Docker (e.g. to drive traffic at it with
+curl while developing), run it directly rather than via the `if __name__`
+block in `api/alerts_service.py` -- that block forces TLS and calls
+`validate_production()`, which is meant for a real deployment, not a laptop:
+
+```bash
+python3 -c "
+from api.alerts_service import app
+app.run(host='127.0.0.1', port=8000, use_reloader=False)
+"
+```
+
+Then `curl http://127.0.0.1:8000/health` and log in as described in step 3
+above (the bootstrap admin password is printed to stderr on first run).
+
+Config precedence: a real environment variable always wins over `.env` --
+`.env` only fills in whatever isn't already set. So `ALERTS_DB_PATH=/tmp/x.db
+python3 ...` overrides the `.env` default without editing the file.
 
 ## Troubleshooting
 

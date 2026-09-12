@@ -12,6 +12,8 @@ from typing import Any, Dict
 
 from dotenv import load_dotenv
 
+from api.env import PROJECT_ROOT
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -83,23 +85,32 @@ class ConfigManager:
         "TESTING": False,
     }
     
-    def __init__(self, env_file: str = ".env"):
+    def __init__(self, env_file: str | None = None):
         """
         Initialize config manager
-        
+
         Args:
-            env_file: Path to .env file
+            env_file: Path to .env file. Defaults to the repo-root .env, so
+                configuration does not depend on the current working directory.
         """
-        self.env_file = env_file
+        self.env_file = str(env_file or PROJECT_ROOT / ".env")
         self.config = {}
         self._load_env_file()
         self._load_environment()
     
     def _load_env_file(self):
-        """Load .env file if it exists"""
+        """Load .env file if it exists.
+
+        override=False: a real environment variable (set by the shell, a
+        systemd unit, CI, or Docker Compose) always wins over the checked-out
+        .env file. This used to be override=True, which meant .env silently
+        clobbered anything already exported -- e.g. ALERTS_DB_PATH or LOG_DIR
+        set on the command line would be discarded in favor of the .env
+        defaults, with no error and no indication why.
+        """
         if os.path.exists(self.env_file):
             try:
-                load_dotenv(self.env_file, override=True)
+                load_dotenv(self.env_file, override=False)
                 logger.info(f"Loaded configuration from {self.env_file}")
             except Exception as e:
                 logger.warning(f"Failed to load .env file: {e}")
@@ -336,13 +347,13 @@ class ConfigManager:
 config = None
 
 
-def init_config(env_file: str = ".env") -> ConfigManager:
+def init_config(env_file: str | None = None) -> ConfigManager:
     """
     Initialize global configuration
-    
+
     Args:
-        env_file: Path to .env file
-        
+        env_file: Path to .env file. Defaults to the repo-root .env.
+
     Returns:
         ConfigManager instance
     """
