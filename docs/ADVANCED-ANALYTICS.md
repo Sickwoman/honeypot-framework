@@ -45,35 +45,37 @@ python3 scripts/generate-analytics-report.py --json
 python3 scripts/generate-analytics-report.py --json --file report.json
 
 # Parse with jq
-python3 scripts/generate-analytics-report.py --json | jq '.summary'
+python3 scripts/generate-analytics-report.py --json | jq '.total_events, .top_ips'
 ```
 
 ### JSON Report Structure
 
+The statistics come from `scripts/honeypot_stats.py`, which the HTML and PDF
+generators share, so all three reports describe the same numbers.
+
 ```json
 {
-  "generated_at": "2026-06-16T10:30:00",
+  "generated_at": "2026-09-13T10:30:00",
   "period_days": 1,
-  "summary": {
-    "total_events": 103,
-    "credentials_captured": 5
-  },
+  "period": "1d",
+  "total_events": 103,
+  "unique_source_ips": 7,
+  "credentials_captured": 5,
+  "failed_logins": 61,
   "top_ips": [
-    {
-      "ip": "192.168.1.1",
-      "count": 45
-    }
+    { "ip": "203.0.113.10", "count": 45 }
   ],
-  "service_distribution": {
-    "SSH": 92,
-    "FTP": 11
-  },
-  "threat_intelligence": {
-    "threat_levels": {
-      "HIGH": 10,
-      "MEDIUM": 5,
-      "LOW": 3
-    },
+  "services": { "ssh": 92, "http": 11 },
+  "service_breakdown": [
+    { "name": "ssh", "count": 92, "percentage": 89.3 }
+  ],
+  "countries": { "Netherlands": 40 },
+  "top_country": "Netherlands",
+  "hourly_trend": [
+    { "timestamp": "2026-09-13T09:00:00.000Z", "count": 12 }
+  ],
+  "threat_intel": {
+    "threat_levels": { "HIGH": 10, "MEDIUM": 5, "LOW": 3 },
     "avg_confidence": 65.5
   }
 }

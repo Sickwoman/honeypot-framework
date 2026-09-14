@@ -2,325 +2,148 @@
 
 ################################################################################
 # PDF Report Generator
-# Generates professional PDF reports from analytics data
+# Renders recent honeypot activity as a PDF via reportlab.
+#
+# The Elasticsearch aggregations live in honeypot_stats.py, shared with
+# generate-reports.py and generate-analytics-report.py.
 ################################################################################
 
 import argparse
+import sys
 from datetime import datetime
+from typing import Any, Dict, List
+from xml.sax.saxutils import escape
 
-try:
-    from reportlab.lib import colors
-    from reportlab.lib.enums import TA_CENTER
-    from reportlab.lib.pagesizes import letter
-    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-    from reportlab.lib.units import inch
-    from reportlab.platypus import (
-        PageBreak,
-        Paragraph,
-        SimpleDocTemplate,
-        Spacer,
-        Table,
-        TableStyle,
-    )
-except ImportError:
-    print("❌ reportlab not installed. Install with: pip3 install reportlab")
-    exit(1)
+from honeypot_stats import HoneypotStats
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import inch
+from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-import es_client
+ACCENT = colors.HexColor("#23303a")
+
+TABLE_STYLE = TableStyle([
+    ("BACKGROUND", (0, 0), (-1, 0), ACCENT),
+    ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
+    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+    ("FONTSIZE", (0, 0), (-1, 0), 10),
+    ("BOTTOMPADDING", (0, 0), (-1, 0), 8),
+    ("BACKGROUND", (0, 1), (-1, -1), colors.whitesmoke),
+    ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+    ("ALIGN", (1, 1), (-1, -1), "RIGHT"),
+])
 
 
 class PDFReportGenerator:
-    def __init__(self, es_host=None, username=None, password=None):
-        self.es = es_client.build_client(
-            es_host,
-            basic_auth=(username or es_client.username(),
-                        password or es_client.password()),
-        )
+    def __init__(self, stats: HoneypotStats = None):
+        self.stats = stats or HoneypotStats()
         self.styles = getSampleStyleSheet()
-        self.setup_custom_styles()
-    
-    def setup_custom_styles(self):
-        """Setup custom paragraph styles"""
         self.title_style = ParagraphStyle(
-            'CustomTitle',
-            parent=self.styles['Heading1'],
-            fontSize=24,
-            textColor=colors.HexColor('#1f77b4'),
-            spaceAfter=30,
-            alignment=TA_CENTER
+            "CustomTitle", parent=self.styles["Heading1"],
+            fontSize=22, textColor=ACCENT, spaceAfter=26, alignment=TA_CENTER,
         )
-        
         self.heading_style = ParagraphStyle(
-            'CustomHeading',
-            parent=self.styles['Heading2'],
-            fontSize=14,
-            textColor=colors.HexColor('#1f77b4'),
-            spaceAfter=12,
-            spaceBefore=12
+            "CustomHeading", parent=self.styles["Heading2"],
+            fontSize=13, textColor=ACCENT, spaceAfter=10, spaceBefore=10,
         )
-    
-    def get_analytics_data(self, days=1):
-        """Fetch analytics data from Elasticsearch"""
-        data = {
-            'total_events': 0,
-            'credentials_captured': 0,
-            'top_ips': [],
-            'services': {},
-            'threat_stats': {}
-        }
-        
-        try:
-            # Total events
-            response = self.es.search(
-                index="honeypot-*",
-                body={
-                    "query": {
-                        "range": {"@timestamp": {"gte": f"now-{days}d"}}
-                    }
-                },
-                size=0
-            )
-            data['total_events'] = response['hits']['total']['value']
-            
-            # Top IPs
-            response = self.es.search(
-                index="honeypot-*",
-                body={
-                    "query": {
-                        "range": {"@timestamp": {"gte": f"now-{days}d"}}
-                    },
-                    "size": 0,
-                    "aggs": {
-                        "top_ips": {
-                            "terms": {
-                                "field": "src_ip",
-                                "size": 10,
-                                "order": {"_count": "desc"}
-                            }
-                        }
-                    }
-                }
-            )
-            
-            for bucket in response['aggregations']['top_ips']['buckets']:
-                data['top_ips'].append({
-                    'ip': bucket['key'],
-                    'count': bucket['doc_count']
-                })
-            
-            # Services
-            response = self.es.search(
-                index="honeypot-*",
-                body={
-                    "query": {
-                        "range": {"@timestamp": {"gte": f"now-{days}d"}}
-                    },
-                    "size": 0,
-                    "aggs": {
-                        "services": {
-                            "terms": {
-                                "field": "service",
-                                "size": 20
-                            }
-                        }
-                    }
-                }
-            )
-            
-            for bucket in response['aggregations']['services']['buckets']:
-                data['services'][bucket['key']] = bucket['doc_count']
-            
-            # Credentials
-            response = self.es.search(
-                index="honeypot-*",
-                body={
-                    "query": {
-                        "bool": {
-                            "must": [
-                                {"range": {"@timestamp": {"gte": f"now-{days}d"}}},
-                                {"exists": {"field": "logdata.PASSWORD"}}
-                            ]
-                        }
-                    }
-                },
-                size=0
-            )
-            data['credentials_captured'] = response['hits']['total']['value']
-            
-            return data
-        except Exception as e:
-            print(f"❌ Error fetching data: {e}")
-            return data
-    
-    def build_title_page(self, story, days):
-        """Build title page"""
-        story.append(Spacer(1, 1.5*inch))
-        
-        title = Paragraph("🍯 HONEYPOT SECURITY REPORT", self.title_style)
-        story.append(title)
-        
-        story.append(Spacer(1, 0.3*inch))
-        
-        date_text = Paragraph(
-            f"<b>Report Date:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}<br/>" +
-            f"<b>Analysis Period:</b> Last {days} day(s)<br/>" +
-            "<b>Status:</b> <font color='green'>Active Monitoring</font>",
-            self.styles['Normal']
-        )
-        story.append(date_text)
-        
-        story.append(PageBreak())
-    
-    def build_executive_summary(self, story, data, days):
-        """Build executive summary"""
-        story.append(Paragraph("Executive Summary", self.heading_style))
-        
-        summary_text = (
-            f"During the {days}-day analysis period, the honeypot captured "
-            f"<b>{data['total_events']:,}</b> attack events from malicious sources. "
-            f"The system identified <b>{len(data['top_ips'])}</b> unique attacking IPs "
-            f"and captured <b>{data['credentials_captured']}</b> credential attempts. "
-            f"Attacks were distributed across <b>{len(data['services'])}</b> different services."
-        )
-        
-        story.append(Paragraph(summary_text, self.styles['Normal']))
-        story.append(Spacer(1, 0.2*inch))
-    
-    def build_statistics_section(self, story, data):
-        """Build statistics section"""
-        story.append(Paragraph("Key Statistics", self.heading_style))
-        
-        stats_data = [
-            ['Metric', 'Value'],
-            ['Total Attack Events', f"{data['total_events']:,}"],
-            ['Unique Attacking IPs', f"{len(data['top_ips'])}"],
-            ['Credentials Captured', f"{data['credentials_captured']}"],
-            ['Services Targeted', f"{len(data['services'])}"]
-        ]
-        
-        stats_table = Table(stats_data, colWidths=[3*inch, 2*inch])
-        stats_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1f77b4')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 12),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black)
-        ]))
-        
-        story.append(stats_table)
-        story.append(Spacer(1, 0.2*inch))
-    
-    def build_top_ips_section(self, story, data):
-        """Build top IPs section"""
-        story.append(Paragraph("Top 10 Attacking IPs", self.heading_style))
-        
-        ip_data = [['Rank', 'IP Address', 'Event Count']]
-        for i, ip_info in enumerate(data['top_ips'][:10], 1):
-            ip_data.append([str(i), ip_info['ip'], str(ip_info['count'])])
-        
-        ip_table = Table(ip_data, colWidths=[0.8*inch, 2.5*inch, 1.5*inch])
-        ip_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1f77b4')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 11),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.lightgrey),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black)
-        ]))
-        
-        story.append(ip_table)
-        story.append(Spacer(1, 0.2*inch))
-    
-    def build_services_section(self, story, data):
-        """Build services targeted section"""
-        story.append(Paragraph("Attacks by Service", self.heading_style))
-        
-        service_data = [['Service', 'Event Count', 'Percentage']]
-        total = sum(data['services'].values())
-        
-        for service, count in sorted(data['services'].items(), 
-                                     key=lambda x: x[1], reverse=True)[:10]:
-            percentage = (count / total * 100) if total > 0 else 0
-            service_data.append([service, str(count), f"{percentage:.1f}%"])
-        
-        service_table = Table(service_data, colWidths=[2*inch, 1.5*inch, 1.5*inch])
-        service_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1f77b4')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 11),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.lightgrey),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black)
-        ]))
-        
-        story.append(service_table)
-        story.append(Spacer(1, 0.2*inch))
-    
-    def build_recommendations(self, story):
-        """Build recommendations section"""
-        story.append(Paragraph("Recommendations", self.heading_style))
-        
-        recommendations = [
-            "1. Review top attacking IPs and implement IP-based filtering",
-            "2. Strengthen SSH credentials and implement rate limiting",
-            "3. Monitor for distributed attacks across multiple IPs",
-            "4. Integrate threat intelligence for IP reputation scoring",
-            "5. Set up automated alerts for HIGH-risk threat levels",
-            "6. Regularly review and update security group rules",
-            "7. Archive old logs to S3 for long-term analysis"
-        ]
-        
-        for rec in recommendations:
-            story.append(Paragraph(f"• {rec}", self.styles['Normal']))
-            story.append(Spacer(1, 0.1*inch))
-        
-        story.append(Spacer(1, 0.2*inch))
-    
-    def generate_pdf(self, filename, days=1):
-        """Generate complete PDF report"""
-        doc = SimpleDocTemplate(filename, pagesize=letter)
-        story = []
-        
-        # Fetch data
-        data = self.get_analytics_data(days)
-        
-        # Build report
-        self.build_title_page(story, days)
-        self.build_executive_summary(story, data, days)
-        self.build_statistics_section(story, data)
-        self.build_top_ips_section(story, data)
-        self.build_services_section(story, data)
-        self.build_recommendations(story)
-        
-        # Build footer
-        story.append(Spacer(1, 0.3*inch))
-        footer_text = Paragraph(
-            f"<i>This report was automatically generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</i>",
-            self.styles['Normal']
-        )
-        story.append(footer_text)
-        
-        # Generate PDF
-        doc.build(story)
-        print(f"✅ PDF report generated: {filename}")
 
-def main():
-    parser = argparse.ArgumentParser(description='PDF Report Generator')
-    parser.add_argument('--output', default='honeypot-report.pdf', help='Output PDF filename')
-    parser.add_argument('--days', type=int, default=1, help='Number of days to analyze')
-    
+    def _table(self, rows: List[List[str]], widths, empty: str):
+        """A styled table, or an italic note when there is nothing to show.
+
+        Cells carry attacker-chosen strings (source IPs, service names), and
+        reportlab's Paragraph/Table markup would otherwise interpret `<` and
+        `&` as markup, so everything is escaped on the way in.
+        """
+        if len(rows) <= 1:
+            return Paragraph(f"<i>{escape(empty)}</i>", self.styles["Normal"])
+        safe = [[escape(str(cell)) for cell in row] for row in rows]
+        table = Table(safe, colWidths=widths)
+        table.setStyle(TABLE_STYLE)
+        return table
+
+    def build(self, data: Dict[str, Any], days: int) -> List[Any]:
+        story: List[Any] = [Spacer(1, 1.4 * inch), Paragraph("Honeypot security report", self.title_style)]
+
+        story.append(Paragraph(
+            f"<b>Generated:</b> {datetime.now():%Y-%m-%d %H:%M:%S}<br/>"
+            f"<b>Period:</b> last {days} day(s)",
+            self.styles["Normal"],
+        ))
+        story.append(PageBreak())
+
+        story.append(Paragraph("Executive summary", self.heading_style))
+        story.append(Paragraph(
+            f"Over the last {days} day(s) the honeypots recorded "
+            f"<b>{data['total_events']:,}</b> events from "
+            f"<b>{data['unique_source_ips']}</b> source addresses, across "
+            f"<b>{len(data['services'])}</b> services. "
+            f"<b>{data['credentials_captured']:,}</b> credential submissions and "
+            f"<b>{data['failed_logins']:,}</b> failed logins were captured.",
+            self.styles["Normal"],
+        ))
+        story.append(Spacer(1, 0.2 * inch))
+
+        story.append(Paragraph("Key statistics", self.heading_style))
+        story.append(self._table([
+            ["Metric", "Value"],
+            ["Total events", f"{data['total_events']:,}"],
+            ["Source addresses", str(data["unique_source_ips"])],
+            ["Credentials captured", f"{data['credentials_captured']:,}"],
+            ["Failed logins", f"{data['failed_logins']:,}"],
+            ["Services targeted", str(len(data["services"]))],
+            ["Top source country", data["top_country"]],
+        ], [3 * inch, 2 * inch], "No data"))
+        story.append(Spacer(1, 0.25 * inch))
+
+        story.append(Paragraph("Top source addresses", self.heading_style))
+        story.append(self._table(
+            [["Rank", "IP address", "Events"]] +
+            [[str(i), entry["ip"], f"{entry['count']:,}"] for i, entry in enumerate(data["top_ips"], 1)],
+            [0.8 * inch, 2.7 * inch, 1.5 * inch],
+            "No source addresses recorded in this period.",
+        ))
+        story.append(Spacer(1, 0.25 * inch))
+
+        story.append(Paragraph("Targeted services", self.heading_style))
+        story.append(self._table(
+            [["Service", "Events", "Share"]] +
+            [[entry["name"], f"{entry['count']:,}", f"{entry['percentage']}%"]
+             for entry in data["service_breakdown"][:10]],
+            [2.2 * inch, 1.4 * inch, 1.4 * inch],
+            "No service activity recorded in this period.",
+        ))
+        story.append(Spacer(1, 0.25 * inch))
+
+        story.append(Paragraph("Recommendations", self.heading_style))
+        for text in [
+            "Review the top source addresses and consider network-level filtering.",
+            "Confirm the response playbooks fired for any HIGH or CRITICAL alerts.",
+            "Check whether newly targeted services indicate a change in attacker interest.",
+            "Verify threat-intelligence enrichment is reaching the alert pipeline.",
+            "Archive logs older than the retention window.",
+        ]:
+            story.append(Paragraph(f"• {escape(text)}", self.styles["Normal"]))
+            story.append(Spacer(1, 0.08 * inch))
+
+        return story
+
+    def generate_pdf(self, filename: str, days: int = 1) -> None:
+        data = self.stats.summary(f"{days}d")
+        SimpleDocTemplate(filename, pagesize=letter).build(self.build(data, days))
+        print(f"✓ Wrote {filename}")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Generate a PDF honeypot report")
+    parser.add_argument("--output", default="honeypot-report.pdf", help="Output filename")
+    parser.add_argument("--days", type=int, default=1, help="How many days back to analyse")
     args = parser.parse_args()
-    
-    generator = PDFReportGenerator()
-    generator.generate_pdf(args.output, args.days)
+
+    PDFReportGenerator().generate_pdf(args.output, args.days)
+    return 0
+
 
 if __name__ == "__main__":
-    main()
-
+    sys.exit(main())

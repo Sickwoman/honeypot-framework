@@ -40,7 +40,7 @@ jobs:
         env:
           # api/auth.py refuses to import without a signing secret.
           JWT_SECRET_KEY: ci-test-secret-not-for-production
-        run: pytest -v --cov=api --cov=analytics --cov=playbooks --cov=monitoring --cov-report=term-missing
+        run: pytest -v --cov=api --cov=analytics --cov=playbooks --cov=monitoring --cov=scripts --cov-report=term-missing
 
   lint:
     name: Lint & type check
