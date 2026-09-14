@@ -6,6 +6,27 @@ What has actually shipped, newest first. Roadmap and open work live in
 ## Unreleased
 
 ### Added
+- CI now builds and smoke-tests the Docker stack on every push: it validates
+  the Compose file, builds both images, starts the core services, and asserts
+  the API answers `/health`, nginx proxies to it, the dashboard serves its
+  built HTML, a login returns a usable token, and an unauthenticated request
+  still gets a 401. `docker compose up --build` is the headline instruction in
+  the README and had never actually been executed anywhere.
+- `scripts/honeypot_stats.py`: the Elasticsearch attack-statistics queries,
+  shared by all three report generators instead of copied into each.
+- `scripts/notifiers.py`: webhook/email delivery, severity colour mapping and
+  the multi-channel fan-out, shared by all four notifiers.
+- Frontend tests (`frontend/src/app.test.ts`, 36 jsdom tests) covering
+  rendering, filtering, sorting, the detail panel, bulk actions, the demo-data
+  fallback and outgoing auth headers — six of them asserting that
+  attacker-controlled fields cannot inject elements. `main.ts` previously had
+  no coverage at all and could not even be imported by a test.
+- `tests/test_scripts_shared.py` (15 tests) for the two new shared modules.
+- A pull request template with a test plan and a security checklist, and
+  branch protection on `main`: pull request required, no direct or force
+  pushes, CI must pass and the branch must be current. Two commits had
+  previously landed on a branch after its PR was already merged and were
+  silently never merged at all.
 - One-command local stack: `docker compose up --build` runs Cowrie, the log
   ingestor, the alert API and the Nightwatch dashboard together. Elasticsearch,
   Kibana and Logstash sit behind an optional `--profile elk`.
@@ -23,6 +44,25 @@ What has actually shipped, newest first. Roadmap and open work live in
   rules, so automated blocks are no longer permanent.
 
 ### Fixed
+- **The email notifier rendered attacker-controlled alert text into HTML
+  unescaped.** `notify-alerts.py` escaped it and `email-notifier.py` did not —
+  the same bug fixed in one copy of duplicated code and not the other. Alert
+  text carries honeypot traffic (usernames, commands, requested paths), so
+  this let an attacker inject markup into the operator's inbox. Escaping now
+  happens once, in `scripts/notifiers.py`.
+- **No notifier set a request timeout**, so an unresponsive webhook endpoint
+  would hang the cron job that called it.
+- **`generate-reports.py` imported `jinja2`**, which is not in
+  `requirements.txt` — the script could not run on a clean install. The
+  template is now plain Python with every value escaped.
+- **`email-notifier.py --daily-report` emailed hardcoded numbers** (103
+  events, `192.168.1.1`, 5 credentials) regardless of what the honeypots had
+  seen. It now reports real statistics and says so when Elasticsearch is
+  unreachable instead of inventing them.
+- `generate-analytics-report.py --file` ran every Elasticsearch query twice,
+  once for stdout and once to capture into the file.
+- Saving dashboard settings left the modal on screen until the follow-up
+  refresh completed — indefinitely, if the API never answered.
 - **`pip install -r requirements.txt` failed outright.** Four pinned versions
   didn't exist on PyPI (`openpyxl==3.10.10`, `PyJWT==2.8.1`, `uuid6==1.0.3`,
   plus `PyJWT` pinned twice at conflicting versions) and two more had no wheel
