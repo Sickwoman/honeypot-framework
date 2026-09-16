@@ -1,0 +1,71 @@
+# Honeypot Framework - optional ELK stack.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.elk.yml up
+#
+# Kept in a separate file rather than behind a `profiles:` key because Compose
+# interpolates the whole file before it filters by profile: a required variable
+# (`${VAR:?...}`) anywhere in docker-compose.yml is required for *every* compose
+# command, so the ELK password made the core stack refuse to start for anyone
+# who wasn't using ELK at all.
+#
+# The core loop does not need any of this -- alerts are stored in SQLite by
+# api/alerts_service.py, and only the reporting/analytics scripts in scripts/
+# talk to Elasticsearch.
+
+name: honeypot-framework
+
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.10.0
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=true
+      - ELASTIC_PASSWORD=${ELASTICSEARCH_PASSWORD:?set ELASTICSEARCH_PASSWORD in .env to use the ELK stack}
+      # Local single-node dev: skip cert setup, but keep auth on so the
+      # scripts' credentials are exercised the same way as in production.
+      - xpack.security.http.ssl.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -u elastic:$${ELASTIC_PASSWORD} http://localhost:9200/_cluster/health || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.10.0
+    restart: unless-stopped
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - ELASTICSEARCH_USERNAME=kibana_system
+      - ELASTICSEARCH_PASSWORD=${KIBANA_SYSTEM_PASSWORD:-}
+    ports:
+      - "5601:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.10.0
+    restart: unless-stopped
+    volumes:
+      - ./config/logstash-secure.conf:/usr/share/logstash/pipeline/logstash.conf:ro
+      # Mounted at the path the pipeline config expects, so the same config
+      # works for both container and native (/home/cowrie/...) deployments.
+      # cowrie-logs is declared in docker-compose.yml, which this file overlays.
+      - cowrie-logs:/home/cowrie/cowrie/var/log/cowrie:ro
+    environment:
+      - LOGSTASH_ES_PASSWORD=${ELASTICSEARCH_PASSWORD:?set ELASTICSEARCH_PASSWORD in .env to use the ELK stack}
+      - LOGSTASH_PASSWORD=${ELASTICSEARCH_PASSWORD:?set ELASTICSEARCH_PASSWORD in .env to use the ELK stack}
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
+volumes:
+  cowrie-logs:
+  elasticsearch-data:

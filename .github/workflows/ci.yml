@@ -76,7 +76,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
@@ -112,9 +112,17 @@ jobs:
             echo "JWT_SECRET_KEY=ci-compose-secret-not-for-production"
             echo "ADMIN_PASSWORD=ci-admin-password-not-for-production"
           } >> .env
+          # Deliberately no ELASTICSEARCH_PASSWORD: the core stack must work
+          # without it. It used to be a required variable in the same file as
+          # the core services, which made every compose command fail for
+          # anyone not running ELK.
 
       - name: Validate the Compose file
         run: docker compose config --quiet
+
+      - name: Validate the ELK overlay
+        run: |
+          ELASTICSEARCH_PASSWORD=ci-elk-password-not-for-production             docker compose -f docker-compose.yml -f docker-compose.elk.yml config --quiet
 
       - name: Build images
         run: docker compose build api dashboard

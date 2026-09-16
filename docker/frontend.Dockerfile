@@ -2,7 +2,7 @@
 # Builds the Vite app, then serves it from nginx, which also proxies the API
 # so the browser talks to a single origin (no CORS setup required).
 
-FROM node:20-alpine AS build
+FROM node:24-alpine AS build
 
 WORKDIR /app
 

@@ -1,7 +1,9 @@
 # Honeypot Framework - full local stack.
 #
 #   docker compose up --build          core loop (honeypot -> ingestor -> API -> dashboard)
-#   docker compose --profile elk up    also start Elasticsearch/Kibana/Logstash
+#
+# Elasticsearch/Kibana/Logstash are optional and live in docker-compose.elk.yml:
+#   docker compose -f docker-compose.yml -f docker-compose.elk.yml up
 #
 # The core loop deliberately does NOT require Elasticsearch: alerts are stored
 # in SQLite by api/alerts_service.py, and only the reporting/analytics scripts
@@ -98,64 +100,7 @@ services:
     depends_on:
       - api
 
-  # ----------------------------------------------------------------------- #
-  # Optional ELK stack:  docker compose --profile elk up
-  # ----------------------------------------------------------------------- #
-  elasticsearch:
-    profiles: ["elk"]
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.10.0
-    restart: unless-stopped
-    environment:
-      - discovery.type=single-node
-      - xpack.security.enabled=true
-      - ELASTIC_PASSWORD=${ELASTICSEARCH_PASSWORD:?set ELASTICSEARCH_PASSWORD in .env to use the elk profile}
-      # Local single-node dev: skip cert setup, but keep auth on so the
-      # scripts' credentials are exercised the same way as in production.
-      - xpack.security.http.ssl.enabled=false
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
-    ports:
-      - "9200:9200"
-    volumes:
-      - elasticsearch-data:/usr/share/elasticsearch/data
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS -u elastic:$${ELASTIC_PASSWORD} http://localhost:9200/_cluster/health || exit 1"]
-      interval: 20s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
-
-  kibana:
-    profiles: ["elk"]
-    image: docker.elastic.co/kibana/kibana:8.10.0
-    restart: unless-stopped
-    environment:
-      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
-      - ELASTICSEARCH_USERNAME=kibana_system
-      - ELASTICSEARCH_PASSWORD=${KIBANA_SYSTEM_PASSWORD:-}
-    ports:
-      - "5601:5601"
-    depends_on:
-      elasticsearch:
-        condition: service_healthy
-
-  logstash:
-    profiles: ["elk"]
-    image: docker.elastic.co/logstash/logstash:8.10.0
-    restart: unless-stopped
-    volumes:
-      - ./config/logstash-secure.conf:/usr/share/logstash/pipeline/logstash.conf:ro
-      # Mounted at the path the pipeline config expects, so the same config
-      # works for both container and native (/home/cowrie/...) deployments.
-      - cowrie-logs:/home/cowrie/cowrie/var/log/cowrie:ro
-    environment:
-      - LOGSTASH_ES_PASSWORD=${ELASTICSEARCH_PASSWORD:-}
-      - LOGSTASH_PASSWORD=${ELASTICSEARCH_PASSWORD:-}
-    depends_on:
-      elasticsearch:
-        condition: service_healthy
-
 volumes:
   cowrie-logs:
   honeypot-data:
   honeypot-logs:
-  elasticsearch-data:

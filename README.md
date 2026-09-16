@@ -63,7 +63,7 @@ docker compose up --build
 Elasticsearch and Kibana are optional — the core loop stores alerts in SQLite:
 
 ```bash
-docker compose --profile elk up     # adds Elasticsearch :9200, Kibana :5601
+docker compose -f docker-compose.yml -f docker-compose.elk.yml up   # adds Elasticsearch :9200, Kibana :5601
 ```
 
 Full walkthrough, including how to log in and generate test traffic:

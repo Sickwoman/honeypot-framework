@@ -29,7 +29,7 @@ What has actually shipped, newest first. Roadmap and open work live in
   silently never merged at all.
 - One-command local stack: `docker compose up --build` runs Cowrie, the log
   ingestor, the alert API and the Nightwatch dashboard together. Elasticsearch,
-  Kibana and Logstash sit behind an optional `--profile elk`.
+  Kibana and Logstash are an optional overlay (`docker-compose.elk.yml`).
   ([docs/QUICKSTART.md](docs/QUICKSTART.md))
 - CI (`.github/workflows/ci.yml`): pytest on Python 3.11 and 3.12 with
   coverage, ruff, mypy (advisory), the frontend build, and a shell-script
