@@ -57,7 +57,14 @@ services:
       - "8000"
     ports:
       # Exposed for curl/scripting; the dashboard reaches it via nginx.
-      - "${API_PORT:-8000}:8000"
+      #
+      # API_HOST_PORT, not API_PORT: gunicorn always binds 8000 inside the
+      # container (see docker/api.Dockerfile), while API_PORT means something
+      # different -- the port the app listens on when run natively over TLS,
+      # which .env.example sets to 8443. Reusing that name here meant a plain
+      # `cp .env.example .env` silently published the API on 8443 while the
+      # docs told you to use 8000.
+      - "${API_HOST_PORT:-8000}:8000"
 
   # ----------------------------------------------------------------------- #
   # Tails the honeypot log and turns events into alerts (which in turn fire
@@ -96,7 +103,7 @@ services:
       dockerfile: docker/frontend.Dockerfile
     restart: unless-stopped
     ports:
-      - "${DASHBOARD_PORT:-8080}:80"
+      - "${DASHBOARD_HOST_PORT:-8080}:80"
     depends_on:
       - api
 

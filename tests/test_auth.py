@@ -17,7 +17,7 @@ from flask import Flask, jsonify
 
 from api.auth import APIKeyManager, AuthenticationError
 from api.middleware import rate_limit
-from api.user_manager import MAX_FAILED_LOGIN_ATTEMPTS, UserManager
+from api.user_manager import MAX_FAILED_LOGIN_ATTEMPTS, UserError, UserManager
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
@@ -149,3 +149,52 @@ def test_unknown_api_key_is_rejected(tmp_path):
 
     with pytest.raises(AuthenticationError):
         APIKeyManager(db_path=db_path).validate_api_key("hf_api_not_a_real_key")
+
+
+# --------------------------------------------------------------------------- #
+# Bootstrap admin creation under concurrency
+# --------------------------------------------------------------------------- #
+def test_ensure_default_admin_is_idempotent(user_manager, monkeypatch):
+    monkeypatch.setenv("ADMIN_PASSWORD", "bootstrap-password-for-tests")
+
+    first = user_manager.ensure_default_admin()
+    second = user_manager.ensure_default_admin()
+
+    assert first is not None
+    assert second is None, "a second call must not create a duplicate admin"
+    assert user_manager.count_users() == 1
+
+
+def test_ensure_default_admin_survives_losing_the_startup_race(user_manager, monkeypatch):
+    """Two gunicorn workers boot together against an empty database.
+
+    count_users() and the INSERT are not atomic, so both workers can pass the
+    'no users yet' check and both try to create 'admin'. The loser used to get
+    UNIQUE constraint failed, which killed the worker during module import and
+    took down part of the API on every cold start.
+
+    Forcing count_users() to keep reporting 0 after the row exists reproduces
+    that window exactly.
+    """
+    monkeypatch.setenv("ADMIN_PASSWORD", "bootstrap-password-for-tests")
+    user_manager.ensure_default_admin()
+
+    monkeypatch.setattr(type(user_manager), "count_users", lambda self: 0)
+
+    assert user_manager.ensure_default_admin() is None
+    # Must not raise, and must not leave a second admin behind.
+    assert user_manager.get_by_username("admin") is not None
+    admins = [u for u in user_manager.list_users() if u["username"] == "admin"]
+    assert len(admins) == 1
+
+
+def test_ensure_default_admin_still_raises_on_a_real_failure(user_manager, monkeypatch):
+    """A genuine creation failure must not be swallowed by the race handling."""
+    monkeypatch.setenv("ADMIN_PASSWORD", "bootstrap-password-for-tests")
+    monkeypatch.setattr(
+        type(user_manager), "create_user",
+        lambda self, **kwargs: (_ for _ in ()).throw(UserError("disk is full")),
+    )
+
+    with pytest.raises(UserError):
+        user_manager.ensure_default_admin()

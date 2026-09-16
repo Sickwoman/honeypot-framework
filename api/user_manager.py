@@ -215,10 +215,23 @@ class UserManager:
             password = secrets.token_urlsafe(18)
             generated = True
 
-        user_id = self.create_user(
-            username=username, password=password, role=Role.ADMIN,
-            full_name="Bootstrap Administrator", created_by="system",
-        )
+        try:
+            user_id = self.create_user(
+                username=username, password=password, role=Role.ADMIN,
+                full_name="Bootstrap Administrator", created_by="system",
+            )
+        except UserError:
+            # Lost a race: the count above and the insert are not atomic, and
+            # the API runs several gunicorn workers that all import this module
+            # at once. On a cold start with an empty database they would all
+            # pass the count check and all try to insert 'admin'; the losers
+            # used to die with UNIQUE constraint failed, taking the worker down
+            # at import time. Another process created the admin -- that is the
+            # desired end state, so treat it as success.
+            if self.get_by_username(username):
+                logger.info("Bootstrap admin already created by another worker")
+                return None
+            raise
 
         if generated:
             logger.warning(

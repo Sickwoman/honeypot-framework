@@ -128,7 +128,9 @@ jobs:
         run: docker compose build api dashboard
 
       - name: Start the core stack
-        run: docker compose up -d
+        run: |
+          docker compose up -d
+          docker compose ps
 
       - name: Wait for the API to answer /health
         run: |
@@ -161,9 +163,13 @@ jobs:
           code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/api/v1/alerts)
           [ "$code" = "401" ] || { echo "::error::expected 401 without a token, got $code"; exit 1; }
 
-      - name: Dump logs on failure
+      - name: Dump state and logs on failure
         if: failure()
-        run: docker compose logs --no-color --tail=200
+        run: |
+          echo "--- container state (note the published ports) ---"
+          docker compose ps -a
+          echo "--- logs ---"
+          docker compose logs --no-color --tail=200
 
       - name: Tear down
         if: always()
