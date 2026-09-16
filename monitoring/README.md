@@ -37,7 +37,7 @@ behind an optional profile (this directory previously held a second, separate
 compose file that bind-mounted host paths which don't exist on most machines):
 
 ```bash
-docker compose --profile elk up     # Elasticsearch :9200, Kibana :5601, Logstash
+docker compose -f docker-compose.yml -f docker-compose.elk.yml up   # Elasticsearch :9200, Kibana :5601, Logstash
 ```
 
 The Logstash pipeline is [`config/logstash-secure.conf`](../config/logstash-secure.conf),

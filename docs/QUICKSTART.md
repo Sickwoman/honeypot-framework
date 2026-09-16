@@ -43,7 +43,8 @@ Elasticsearch, Kibana and Logstash are **optional** — the core loop stores
 alerts in SQLite and doesn't need them:
 
 ```bash
-docker compose --profile elk up    # adds ES :9200 and Kibana :5601
+docker compose -f docker-compose.yml -f docker-compose.elk.yml up
+#   adds Elasticsearch :9200 and Kibana :5601; needs ELASTICSEARCH_PASSWORD in .env
 ```
 
 ## 3. Log in

@@ -40,7 +40,7 @@ jobs:
         env:
           # api/auth.py refuses to import without a signing secret.
           JWT_SECRET_KEY: ci-test-secret-not-for-production
-        run: pytest -v --cov=api --cov=analytics --cov=playbooks --cov=monitoring --cov-report=term-missing
+        run: pytest -v --cov=api --cov=analytics --cov=playbooks --cov=monitoring --cov=scripts --cov-report=term-missing
 
   lint:
     name: Lint & type check
@@ -76,7 +76,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
@@ -96,3 +96,81 @@ jobs:
             bash -n "$script" || { echo "::error file=$script::bash syntax error"; fail=1; }
           done < <(find . -name '*.sh' -not -path './frontend/node_modules/*')
           exit $fail
+
+  docker:
+    name: Docker stack
+    runs-on: ubuntu-latest
+    # README and docs/QUICKSTART.md both lead with `docker compose up --build`.
+    # This job is what lets us claim that actually works.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write a .env for the stack
+        run: |
+          cp .env.example .env
+          {
+            echo "JWT_SECRET_KEY=ci-compose-secret-not-for-production"
+            echo "ADMIN_PASSWORD=ci-admin-password-not-for-production"
+          } >> .env
+          # Deliberately no ELASTICSEARCH_PASSWORD: the core stack must work
+          # without it. It used to be a required variable in the same file as
+          # the core services, which made every compose command fail for
+          # anyone not running ELK.
+
+      - name: Validate the Compose file
+        run: docker compose config --quiet
+
+      - name: Validate the ELK overlay
+        run: |
+          ELASTICSEARCH_PASSWORD=ci-elk-password-not-for-production             docker compose -f docker-compose.yml -f docker-compose.elk.yml config --quiet
+
+      - name: Build images
+        run: docker compose build api dashboard
+
+      - name: Start the core stack
+        run: |
+          docker compose up -d
+          docker compose ps
+
+      - name: Wait for the API to answer /health
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8000/health > /tmp/health.json; then
+              echo "API healthy after ${i}s:"; cat /tmp/health.json; exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::API never became healthy"; exit 1
+
+      - name: Dashboard serves the built app
+        run: curl -fsS http://localhost:8080/ | grep -qi '<title>' || { echo "::error::dashboard did not serve index.html"; exit 1; }
+
+      - name: API is reachable through the nginx proxy
+        run: curl -fsS http://localhost:8080/health | grep -q '"status"' || { echo "::error::nginx did not proxy /health to the API"; exit 1; }
+
+      - name: Log in and call an authenticated route
+        run: |
+          token=$(curl -fsS -X POST http://localhost:8000/auth/login \
+            -H 'Content-Type: application/json' \
+            -d '{"username":"admin","password":"ci-admin-password-not-for-production"}' \
+            | python3 -c 'import sys, json; print(json.load(sys.stdin)["token"])')
+          [ -n "$token" ] || { echo "::error::login returned no token"; exit 1; }
+          curl -fsS http://localhost:8000/api/v1/alerts -H "Authorization: Bearer $token" | grep -q '"alerts"' \
+            || { echo "::error::authenticated /api/v1/alerts call failed"; exit 1; }
+
+      - name: Unauthenticated request is rejected
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/api/v1/alerts)
+          [ "$code" = "401" ] || { echo "::error::expected 401 without a token, got $code"; exit 1; }
+
+      - name: Dump state and logs on failure
+        if: failure()
+        run: |
+          echo "--- container state (note the published ports) ---"
+          docker compose ps -a
+          echo "--- logs ---"
+          docker compose logs --no-color --tail=200
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

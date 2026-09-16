@@ -1,295 +1,114 @@
 #!/usr/bin/env python3
 
 ################################################################################
-# Alert Notifications & Webhooks Integration
-# Send alerts to Slack, Discord, Email, and custom webhooks
+# Honeypot Framework - Alert fan-out and threshold monitoring
+#
+# Sends one alert to every configured channel, and (in `monitor` mode) raises
+# alerts when recent honeypot activity crosses a threshold. Delivery itself
+# lives in notifiers.py, shared with the per-channel CLIs.
+#
+#   notify-alerts.py monitor                      # check thresholds, alert if tripped
+#   notify-alerts.py send "Title" "Message"       # send to every configured channel
+#   notify-alerts.py channels                     # list what is configured
 ################################################################################
 
-import html
-import os
-from datetime import datetime
-from enum import Enum
+import argparse
+import logging
+import sys
 
 import es_client
-import requests
+from honeypot_stats import HoneypotStats
+from notifiers import Severity, configured_channels, notify_all
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+logger = logging.getLogger(__name__)
+
+# Thresholds that trip an alert. Tuned for a lab honeypot; raise them once the
+# sensor is on a public address, where background scanning is constant.
+ATTACK_VOLUME_WINDOW = "5m"
+ATTACK_VOLUME_THRESHOLD = 100
+MALWARE_WINDOW = "1h"
 
 
-class AlertLevel(Enum):
-    INFO = "info"
-    WARNING = "warning"
-    CRITICAL = "critical"
-
-class AlertNotifier:
-    def __init__(self):
-        self.slack_webhook = os.getenv('SLACK_WEBHOOK_URL')
-        self.discord_webhook = os.getenv('DISCORD_WEBHOOK_URL')
-        self.email_to = os.getenv('ALERT_EMAIL_TO')
-        self.custom_webhook = os.getenv('CUSTOM_WEBHOOK_URL')
-    
-    def send_slack_alert(self, title, message, level=AlertLevel.INFO):
-        """Send alert to Slack"""
-        if not self.slack_webhook:
-            print("❌ Slack webhook not configured")
-            return False
-        
-        color_map = {
-            AlertLevel.INFO: "#36a64f",
-            AlertLevel.WARNING: "#ff9900",
-            AlertLevel.CRITICAL: "#ff0000"
-        }
-        
-        payload = {
-            "attachments": [
-                {
-                    "fallback": title,
-                    "color": color_map.get(level, "#36a64f"),
-                    "title": f"🍯 {title}",
-                    "text": message,
-                    "footer": "Honeypot Framework",
-                    "ts": int(datetime.now().timestamp())
-                }
-            ]
-        }
-        
-        try:
-            response = requests.post(self.slack_webhook, json=payload)
-            if response.status_code == 200:
-                print(f"✅ Slack alert sent: {title}")
-                return True
-            else:
-                print(f"❌ Slack error: {response.status_code}")
-                return False
-        except Exception as e:
-            print(f"❌ Error sending Slack alert: {e}")
-            return False
-    
-    def send_discord_alert(self, title, message, level=AlertLevel.INFO):
-        """Send alert to Discord"""
-        if not self.discord_webhook:
-            print("❌ Discord webhook not configured")
-            return False
-        
-        color_map = {
-            AlertLevel.INFO: 0x36a64f,
-            AlertLevel.WARNING: 0xff9900,
-            AlertLevel.CRITICAL: 0xff0000
-        }
-        
-        payload = {
-            "embeds": [
-                {
-                    "title": f"🍯 {title}",
-                    "description": message,
-                    "color": color_map.get(level, 0x36a64f),
-                    "timestamp": datetime.now().isoformat(),
-                    "footer": {
-                        "text": "Honeypot Framework"
-                    }
-                }
-            ]
-        }
-        
-        try:
-            response = requests.post(self.discord_webhook, json=payload)
-            if response.status_code == 204:
-                print(f"✅ Discord alert sent: {title}")
-                return True
-            else:
-                print(f"❌ Discord error: {response.status_code}")
-                return False
-        except Exception as e:
-            print(f"❌ Error sending Discord alert: {e}")
-            return False
-    
-    def send_email_alert(self, subject, message, level=AlertLevel.INFO):
-        """Send alert via email"""
-        if not self.email_to:
-            print("❌ Email not configured")
-            return False
-        
-        try:
-            import smtplib
-            from email.mime.multipart import MIMEMultipart
-            from email.mime.text import MIMEText
-            
-            sender = os.getenv('ALERT_EMAIL_FROM', 'honeypot@example.com')
-            password = os.getenv('ALERT_EMAIL_PASSWORD', '')
-            smtp_server = os.getenv('ALERT_SMTP_SERVER', 'smtp.gmail.com')
-            smtp_port = int(os.getenv('ALERT_SMTP_PORT', '587'))
-            
-            msg = MIMEMultipart()
-            msg['Subject'] = f"[{level.value.upper()}] {subject}"
-            msg['From'] = sender
-            msg['To'] = self.email_to
-
-            # Alert text can carry attacker-controlled honeypot data
-            # (usernames, commands), so escape it before embedding in HTML.
-            safe_message = html.escape(str(message))
-
-            body = f"""
-            <html>
-            <body style="font-family: Arial, sans-serif;">
-                <h2 style="color: {'green' if level == AlertLevel.INFO else 'orange' if level == AlertLevel.WARNING else 'red'};">
-                    🍯 Honeypot Alert
-                </h2>
-                <p><strong>Level:</strong> {level.value.upper()}</p>
-                <p><strong>Time:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-                <hr>
-                <p>{safe_message}</p>
-                <hr>
-                <p style="color: #888; font-size: 12px;">
-                    This alert was generated by Honeypot Framework
-                </p>
-            </body>
-            </html>
-            """
-            
-            msg.attach(MIMEText(body, 'html'))
-            
-            with smtplib.SMTP(smtp_server, smtp_port) as server:
-                server.starttls()
-                server.login(sender, password)
-                server.send_message(msg)
-            
-            print(f"✅ Email alert sent to {self.email_to}")
-            return True
-        except Exception as e:
-            print(f"❌ Error sending email: {e}")
-            return False
-    
-    def send_webhook_alert(self, event_type, data, level=AlertLevel.INFO):
-        """Send alert to custom webhook"""
-        if not self.custom_webhook:
-            print("❌ Custom webhook not configured")
-            return False
-        
-        payload = {
-            "event_type": event_type,
-            "level": level.value,
-            "timestamp": datetime.now().isoformat(),
-            "data": data
-        }
-        
-        try:
-            response = requests.post(self.custom_webhook, json=payload)
-            if response.status_code in [200, 201, 204]:
-                print(f"✅ Webhook alert sent: {event_type}")
-                return True
-            else:
-                print(f"❌ Webhook error: {response.status_code}")
-                return False
-        except Exception as e:
-            print(f"❌ Error sending webhook: {e}")
-            return False
-    
-    def send_all_alerts(self, title, message, level=AlertLevel.INFO):
-        """Send alert to all configured channels"""
-        print(f"\n📢 Sending alerts: {title}")
-        print(f"   Level: {level.value}")
-        
-        self.send_slack_alert(title, message, level)
-        self.send_discord_alert(title, message, level)
-        self.send_email_alert(title, message, level)
-        self.send_webhook_alert("honeypot_alert", {
-            "title": title,
-            "message": message
-        }, level)
-
-# Alert Types
 class AlertTypes:
-    HIGH_ATTACK_VOLUME = "High Attack Volume Detected"
-    MALWARE_DETECTED = "Malware Download Attempt"
-    BRUTE_FORCE = "Brute Force Attack Detected"
-    PORT_SCAN = "Port Scan Detected"
-    CREDENTIAL_CAPTURE = "Credentials Captured"
-    SERVICE_DOWN = "Service Down"
-    HIGH_MEMORY = "High Memory Usage"
-    DISK_FULL = "Disk Space Low"
+    HIGH_ATTACK_VOLUME = "High attack volume detected"
+    MALWARE_DETECTED = "Malware download attempt"
+    BRUTE_FORCE = "Brute force attack detected"
+    PORT_SCAN = "Port scan detected"
+    CREDENTIAL_CAPTURE = "Credentials captured"
+    SERVICE_DOWN = "Service down"
 
-def monitor_and_alert():
-    """Monitor honeypot and send alerts"""
-    import requests
-    
-    notifier = AlertNotifier()
-    es_url = es_client.url()
-    auth = es_client.auth()
-    verify = es_client.verify()
 
-    try:
-        # Check for high attack volume (100+ in 5 minutes)
-        response = requests.get(
-            f"{es_url}/honeypot-*/_count",
-            auth=auth,
-            verify=verify,
-            json={
-                "query": {
-                    "range": {
-                        "@timestamp": {"gte": "now-5m"}
-                    }
-                }
-            }
-        )
-        
-        count = response.json().get('count', 0)
-        if count > 100:
-            notifier.send_all_alerts(
-                AlertTypes.HIGH_ATTACK_VOLUME,
-                f"{count} attacks detected in the last 5 minutes",
-                AlertLevel.CRITICAL
-            )
-        
-        # Check for malware attempts
-        response = requests.get(
-            f"{es_url}/honeypot-*/_count",
-            auth=auth,
-            verify=verify,
-            json={
-                "query": {
-                    "bool": {
-                        "must": [
-                            {"match": {"logdata.CMD": "wget"}},
-                            {"range": {"@timestamp": {"gte": "now-1h"}}}
-                        ]
-                    }
-                }
-            }
-        )
-        
-        malware_count = response.json().get('count', 0)
-        if malware_count > 0:
-            notifier.send_all_alerts(
-                AlertTypes.MALWARE_DETECTED,
-                f"{malware_count} malware download attempts detected",
-                AlertLevel.CRITICAL
-            )
-    
-    except Exception as e:
-        print(f"❌ Monitoring error: {e}")
+def _report(title: str, results: dict) -> bool:
+    """Log per-channel delivery and return whether anything got through."""
+    if not results:
+        logger.warning("No channel configured -- '%s' was not delivered", title)
+        return False
+    for channel, delivered in results.items():
+        logger.info("%s -> %s", channel, "sent" if delivered else "FAILED")
+    return any(results.values())
+
+
+def monitor_and_alert() -> int:
+    """Check recent activity against the thresholds and alert on what trips."""
+    stats = HoneypotStats()
+    tripped = False
+
+    volume = stats.total_events(ATTACK_VOLUME_WINDOW)
+    if volume > ATTACK_VOLUME_THRESHOLD:
+        tripped = True
+        _report(AlertTypes.HIGH_ATTACK_VOLUME, notify_all(
+            AlertTypes.HIGH_ATTACK_VOLUME,
+            f"{volume} events in the last {ATTACK_VOLUME_WINDOW} "
+            f"(threshold {ATTACK_VOLUME_THRESHOLD})",
+            Severity.CRITICAL,
+        ))
+
+    malware = stats.download_attempts(MALWARE_WINDOW)
+    if malware > 0:
+        tripped = True
+        _report(AlertTypes.MALWARE_DETECTED, notify_all(
+            AlertTypes.MALWARE_DETECTED,
+            f"{malware} download attempts in the last {MALWARE_WINDOW}",
+            Severity.CRITICAL,
+        ))
+
+    if not tripped:
+        logger.info("No thresholds tripped (%s events in the last %s)", volume, ATTACK_VOLUME_WINDOW)
+    return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Honeypot alert fan-out")
+    sub = parser.add_subparsers(dest="command")
+
+    sub.add_parser("monitor", help="Check activity thresholds and alert if tripped")
+    sub.add_parser("channels", help="List the notification channels that are configured")
+
+    send = sub.add_parser("send", help="Send one alert to every configured channel")
+    send.add_argument("title")
+    send.add_argument("message")
+    send.add_argument("--severity", default="info", choices=[s.value for s in Severity])
+
+    args = parser.parse_args()
+
+    if args.command == "monitor":
+        try:
+            return monitor_and_alert()
+        except es_client.ElasticsearchConfigError as exc:
+            logger.error("%s", exc)
+            return 1
+    if args.command == "channels":
+        channels = configured_channels()
+        print("Configured channels:", ", ".join(channels) if channels else "none")
+        return 0 if channels else 1
+    if args.command == "send":
+        delivered = _report(args.title, notify_all(args.title, args.message, Severity.parse(args.severity)))
+        return 0 if delivered else 1
+
+    parser.print_help()
+    return 0
+
 
 if __name__ == "__main__":
-    import sys
-    
-    notifier = AlertNotifier()
-    
-    if len(sys.argv) < 2:
-        print("Usage: notify-alerts.py [slack|discord|email|webhook|all|monitor]")
-        sys.exit(1)
-    
-    action = sys.argv[1]
-    
-    if action == "monitor":
-        monitor_and_alert()
-    elif action == "all":
-        notifier.send_all_alerts(
-            "Test Alert",
-            "This is a test alert from Honeypot Framework",
-            AlertLevel.INFO
-        )
-    else:
-        print("Running alert test...")
-        notifier.send_all_alerts(
-            "Honeypot Alert Test",
-            "Test message from notification system",
-            AlertLevel.INFO
-        )
-
+    sys.exit(main())

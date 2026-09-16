@@ -2,333 +2,156 @@
 
 ################################################################################
 # Automated Reports Generation Script
-# Generates daily/weekly/monthly attack reports
+# Generates daily/weekly/monthly attack reports as HTML and JSON.
+#
+# The Elasticsearch aggregations live in honeypot_stats.py, shared with
+# generate-pdf-report.py and generate-analytics-report.py. Email delivery lives
+# in notifiers.py.
 ################################################################################
 
+import argparse
+import html
 import json
 import os
-import smtplib
+import sys
 from datetime import datetime
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
+from typing import Any, Dict
 
-import es_client
-import requests
-from jinja2 import Template
+from honeypot_stats import HoneypotStats
+from notifiers import EmailNotifier, NotificationError
+
+REPORT_DIR = os.getenv("REPORT_OUTPUT_DIR", "/tmp")
+
+PERIODS = {
+    "daily": ("24h", "last 24 hours"),
+    "weekly": ("7d", "last 7 days"),
+    "monthly": ("30d", "last 30 days"),
+}
 
 
-class ReportGenerator:
-    def __init__(self, es_url=None, username=None, password=None):
-        self.es_url = es_url or es_client.url()
-        self.username = username or es_client.username()
-        self.password = password or es_client.password()
-        self.verify_ssl = es_client.verify()
-        
-    def get_attack_statistics(self, period="24h"):
-        """Get attack statistics for given period"""
-        try:
-            response = requests.get(
-                f"{self.es_url}/honeypot-*/_search",
-                auth=(self.username, self.password),
-                verify=self.verify_ssl,
-                json={
-                    "query": {
-                        "range": {
-                            "@timestamp": {"gte": f"now-{period}"}
-                        }
-                    },
-                    "aggs": {
-                        "total_attacks": {"value_count": {"field": "_id"}},
-                        "top_ips": {
-                            "terms": {"field": "src_ip", "size": 10}
-                        },
-                        "by_service": {
-                            "terms": {"field": "service", "size": 10}
-                        },
-                        "by_country": {
-                            "terms": {"field": "geoip.country_name", "size": 10}
-                        },
-                        "failed_logins": {
-                            "filter": {
-                                "term": {"event_type": "login_attempt"}
-                            }
-                        }
-                    },
-                    "size": 0
-                }
-            )
-            return response.json()
-        except Exception as e:
-            print(f"Error getting statistics: {e}")
-            return None
-    
-    def generate_html_report(self, stats, period="24h"):
-        """Generate HTML report"""
-        
-        html_template = """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="utf-8">
-            <title>Honeypot Attack Report</title>
-            <style>
-                body { font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }
-                .header { background-color: #2c3e50; color: white; padding: 20px; border-radius: 5px; }
-                .section { background-color: white; margin: 20px 0; padding: 20px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-                .metric { display: inline-block; width: 45%; margin: 10px; padding: 15px; background-color: #ecf0f1; border-radius: 5px; }
-                .metric-value { font-size: 32px; font-weight: bold; color: #e74c3c; }
-                .metric-label { color: #7f8c8d; font-size: 14px; }
-                table { width: 100%; border-collapse: collapse; }
-                th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
-                th { background-color: #34495e; color: white; }
-                tr:hover { background-color: #f5f5f5; }
-                .alert { background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 10px 0; }
-                .success { background-color: #d4edda; border-left: 4px solid #28a745; padding: 15px; margin: 10px 0; }
-                .danger { background-color: #f8d7da; border-left: 4px solid #dc3545; padding: 15px; margin: 10px 0; }
-                .footer { text-align: center; color: #7f8c8d; font-size: 12px; margin-top: 40px; }
-            </style>
-        </head>
-        <body>
-            <div class="header">
-                <h1>🍯 Honeypot Attack Report</h1>
-                <p>Period: {{ period }} | Generated: {{ date }}</p>
-            </div>
-            
-            <div class="section">
-                <h2>📊 Executive Summary</h2>
-                <div class="metric">
-                    <div class="metric-value">{{ total_attacks }}</div>
-                    <div class="metric-label">Total Attacks</div>
-                </div>
-                <div class="metric">
-                    <div class="metric-value">{{ unique_ips }}</div>
-                    <div class="metric-label">Unique IPs</div>
-                </div>
-                <div class="metric">
-                    <div class="metric-value">{{ top_country }}</div>
-                    <div class="metric-label">Top Attack Country</div>
-                </div>
-                <div class="metric">
-                    <div class="metric-value">{{ failed_logins }}</div>
-                    <div class="metric-label">Failed Login Attempts</div>
-                </div>
-            </div>
-            
-            <div class="section">
-                <h2>🎯 Top Attacking IPs</h2>
-                <table>
-                    <tr>
-                        <th>IP Address</th>
-                        <th>Attack Count</th>
-                        <th>Country</th>
-                    </tr>
-                    {% for ip in top_ips %}
-                    <tr>
-                        <td>{{ ip.ip }}</td>
-                        <td>{{ ip.count }}</td>
-                        <td>{{ ip.country }}</td>
-                    </tr>
-                    {% endfor %}
-                </table>
-            </div>
-            
-            <div class="section">
-                <h2>📡 Attacks by Service</h2>
-                <table>
-                    <tr>
-                        <th>Service</th>
-                        <th>Attack Count</th>
-                        <th>Percentage</th>
-                    </tr>
-                    {% for service in services %}
-                    <tr>
-                        <td>{{ service.name }}</td>
-                        <td>{{ service.count }}</td>
-                        <td>{{ service.percentage }}%</td>
-                    </tr>
-                    {% endfor %}
-                </table>
-            </div>
-            
-            <div class="section">
-                <h2>⚠️ Security Alerts</h2>
-                {% if high_risk_ips %}
-                <div class="danger">
-                    <strong>🚨 High Risk IPs Detected</strong>
-                    {% for ip in high_risk_ips %}
-                    <div>{{ ip }} - {{ ip_risk[ip] }} incidents</div>
-                    {% endfor %}
-                </div>
-                {% endif %}
-                
-                {% if malware_attempts %}
-                <div class="alert">
-                    <strong>⚠️ Malware Download Attempts</strong>
-                    <div>{{ malware_attempts }} attempts detected</div>
-                </div>
-                {% endif %}
-                
-                <div class="success">
-                    <strong>✅ All honeypots operational</strong>
-                    <div>No service outages detected</div>
-                </div>
-            </div>
-            
-            <div class="section">
-                <h2>📈 Recommendations</h2>
-                <ul>
-                    <li>Monitor top attacking IPs for patterns</li>
-                    <li>Review failed login attempts for brute force attacks</li>
-                    <li>Investigate any new services being targeted</li>
-                    <li>Check geographic distribution for anomalies</li>
-                    <li>Maintain honeypot infrastructure updates</li>
-                </ul>
-            </div>
-            
-            <div class="footer">
-                <p>This report was automatically generated by Honeypot Framework</p>
-                <p>For more information, visit: https://github.com/Sickwoman/honeypot-framework</p>
-            </div>
-        </body>
-        </html>
-        """
-        
-        template = Template(html_template)
-        html = template.render(
-            period=period,
-            date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            total_attacks=stats.get('total_attacks', 0),
-            unique_ips=len(stats.get('top_ips', [])),
-            top_country=stats.get('top_country', 'N/A'),
-            failed_logins=stats.get('failed_logins', 0),
-            top_ips=stats.get('top_ips', []),
-            services=stats.get('services', []),
-            high_risk_ips=stats.get('high_risk_ips', []),
-            malware_attempts=stats.get('malware_attempts', 0),
-            ip_risk=stats.get('ip_risk', {})
-        )
-        return html
-    
-    def generate_json_report(self, stats, period="24h"):
-        """Generate JSON report"""
-        report = {
-            "generated": datetime.now().isoformat(),
-            "period": period,
-            "statistics": stats
-        }
-        return json.dumps(report, indent=2)
-    
-    def save_report(self, content, filename, format="html"):
-        """Save report to file"""
-        filepath = f"/tmp/honeypot-report-{datetime.now().strftime('%Y%m%d_%H%M%S')}.{format}"
-        
-        with open(filepath, 'w') as f:
-            f.write(content)
-        
-        print(f"✅ Report saved: {filepath}")
-        return filepath
-    
-    def send_email_report(self, html_content, recipient, subject="Honeypot Attack Report"):
-        """Send report via email"""
-        try:
-            sender = os.getenv('REPORT_EMAIL_FROM', 'honeypot@example.com')
-            password = os.getenv('REPORT_EMAIL_PASSWORD', '')
-            smtp_server = os.getenv('REPORT_SMTP_SERVER', 'smtp.gmail.com')
-            smtp_port = int(os.getenv('REPORT_SMTP_PORT', '587'))
-            
-            message = MIMEMultipart('alternative')
-            message['Subject'] = subject
-            message['From'] = sender
-            message['To'] = recipient
-            
-            part = MIMEText(html_content, 'html')
-            message.attach(part)
-            
-            with smtplib.SMTP(smtp_server, smtp_port) as server:
-                server.starttls()
-                server.login(sender, password)
-                server.send_message(message)
-            
-            print(f"✅ Email sent to {recipient}")
-            return True
-        except Exception as e:
-            print(f"❌ Error sending email: {e}")
-            return False
-    
-    def generate_daily_report(self):
-        """Generate daily report"""
-        print("📊 Generating daily report...")
-        stats = self.get_attack_statistics("24h")
-        
-        if stats:
-            html = self.generate_html_report(stats, "24 hours")
-            json_report = self.generate_json_report(stats, "24h")
-            
-            self.save_report(html, "daily-report", "html")
-            self.save_report(json_report, "daily-report", "json")
-            
-            # Send email if configured
-            recipient = os.getenv('REPORT_EMAIL_TO')
-            if recipient:
-                self.send_email_report(html, recipient, "Daily Honeypot Attack Report")
-    
-    def generate_weekly_report(self):
-        """Generate weekly report"""
-        print("📊 Generating weekly report...")
-        stats = self.get_attack_statistics("7d")
-        
-        if stats:
-            html = self.generate_html_report(stats, "7 days")
-            json_report = self.generate_json_report(stats, "7d")
-            
-            self.save_report(html, "weekly-report", "html")
-            self.save_report(json_report, "weekly-report", "json")
-            
-            recipient = os.getenv('REPORT_EMAIL_TO')
-            if recipient:
-                self.send_email_report(html, recipient, "Weekly Honeypot Attack Report")
-    
-    def generate_monthly_report(self):
-        """Generate monthly report"""
-        print("📊 Generating monthly report...")
-        stats = self.get_attack_statistics("30d")
-        
-        if stats:
-            html = self.generate_html_report(stats, "30 days")
-            json_report = self.generate_json_report(stats, "30d")
-            
-            self.save_report(html, "monthly-report", "html")
-            self.save_report(json_report, "monthly-report", "json")
-            
-            recipient = os.getenv('REPORT_EMAIL_TO')
-            if recipient:
-                self.send_email_report(html, recipient, "Monthly Honeypot Attack Report")
+def _rows(pairs, columns) -> str:
+    """Table rows from an iterable of tuples, every cell escaped."""
+    if not pairs:
+        return f'<tr><td colspan="{columns}" class="empty">Nothing recorded in this period</td></tr>'
+    return "".join(
+        "<tr>" + "".join(f"<td>{html.escape(str(cell))}</td>" for cell in row) + "</tr>"
+        for row in pairs
+    )
 
-def main():
-    import sys
-    
-    generator = ReportGenerator()
-    
-    if len(sys.argv) < 2:
-        print("Usage: generate-reports.py [daily|weekly|monthly|all]")
-        sys.exit(1)
-    
-    report_type = sys.argv[1]
-    
-    if report_type == "daily":
-        generator.generate_daily_report()
-    elif report_type == "weekly":
-        generator.generate_weekly_report()
-    elif report_type == "monthly":
-        generator.generate_monthly_report()
-    elif report_type == "all":
-        generator.generate_daily_report()
-        generator.generate_weekly_report()
-        generator.generate_monthly_report()
-    else:
-        print("Invalid report type. Use: daily, weekly, monthly, or all")
-        sys.exit(1)
+
+def render_html(stats: Dict[str, Any], label: str) -> str:
+    """Render the report.
+
+    Values come from honeypot traffic, so every one of them is escaped -- an
+    attacker picks their own source IP, username and command strings, and this
+    report gets opened in a browser and mailed to an operator.
+    """
+    top_ips = [(ip["ip"], ip["count"]) for ip in stats["top_ips"]]
+    services = [(s["name"], s["count"], f"{s['percentage']}%") for s in stats["service_breakdown"]]
+    countries = list(stats["countries"].items())
+
+    return f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Honeypot attack report</title>
+<style>
+  body {{ font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 24px; background: #f5f5f5; color: #222; }}
+  .header {{ background: #23303a; color: #fff; padding: 20px; border-radius: 4px; }}
+  .header h1 {{ margin: 0 0 6px; font-size: 20px; }}
+  .header p {{ margin: 0; opacity: .75; font-size: 13px; }}
+  .section {{ background: #fff; margin: 18px 0; padding: 18px; border-radius: 4px; border: 1px solid #e2e2e2; }}
+  .section h2 {{ margin: 0 0 14px; font-size: 15px; }}
+  .metrics {{ display: flex; flex-wrap: wrap; gap: 12px; }}
+  .metric {{ flex: 1 1 160px; padding: 14px; background: #f7f8f9; border-radius: 4px; }}
+  .metric .value {{ font-size: 26px; font-weight: 600; }}
+  .metric .label {{ color: #6b7280; font-size: 12px; }}
+  table {{ width: 100%; border-collapse: collapse; font-size: 13px; }}
+  th, td {{ padding: 8px 10px; text-align: left; border-bottom: 1px solid #eee; }}
+  th {{ background: #f0f2f4; font-size: 12px; }}
+  td.empty {{ color: #6b7280; font-style: italic; }}
+  .footer {{ color: #6b7280; font-size: 11px; text-align: center; margin-top: 28px; }}
+</style>
+</head>
+<body>
+  <div class="header">
+    <h1>Honeypot attack report</h1>
+    <p>Period: {html.escape(label)} &middot; Generated {datetime.now():%Y-%m-%d %H:%M:%S}</p>
+  </div>
+
+  <div class="section">
+    <h2>Summary</h2>
+    <div class="metrics">
+      <div class="metric"><div class="value">{stats['total_events']:,}</div><div class="label">Total events</div></div>
+      <div class="metric"><div class="value">{stats['unique_source_ips']}</div><div class="label">Source addresses</div></div>
+      <div class="metric"><div class="value">{stats['failed_logins']:,}</div><div class="label">Failed logins</div></div>
+      <div class="metric"><div class="value">{stats['credentials_captured']:,}</div><div class="label">Credentials captured</div></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Top source addresses</h2>
+    <table><tr><th>IP address</th><th>Events</th></tr>{_rows(top_ips, 2)}</table>
+  </div>
+
+  <div class="section">
+    <h2>Targeted services</h2>
+    <table><tr><th>Service</th><th>Events</th><th>Share</th></tr>{_rows(services, 3)}</table>
+  </div>
+
+  <div class="section">
+    <h2>Source countries</h2>
+    <table><tr><th>Country</th><th>Events</th></tr>{_rows(countries, 2)}</table>
+  </div>
+
+  <div class="footer">
+    Generated by the Honeypot Framework &middot;
+    https://github.com/Sickwoman/honeypot-framework
+  </div>
+</body>
+</html>"""
+
+
+def save(content: str, name: str, extension: str) -> str:
+    path = os.path.join(REPORT_DIR, f"honeypot-{name}-{datetime.now():%Y%m%d_%H%M%S}.{extension}")
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(content)
+    print(f"✓ Wrote {path}")
+    return path
+
+
+def generate(report_type: str, email_to: str = None) -> None:
+    period, label = PERIODS[report_type]
+    print(f"Generating {report_type} report ({label})...")
+
+    stats = HoneypotStats().summary(period)
+    document = render_html(stats, label)
+
+    save(document, report_type, "html")
+    save(json.dumps({"generated": datetime.now().isoformat(), **stats}, indent=2), report_type, "json")
+
+    recipient = email_to or os.getenv("REPORT_EMAIL_TO")
+    if not recipient:
+        return
+    try:
+        notifier = EmailNotifier()
+        subject = f"Honeypot {report_type} report"
+        print("✓ Emailed report" if notifier.send_html(recipient, subject, document)
+              else "✗ Report email failed")
+    except NotificationError as exc:
+        print(f"✗ Not emailing the report: {exc}", file=sys.stderr)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Generate honeypot attack reports")
+    parser.add_argument("type", choices=[*PERIODS, "all"], help="Reporting period")
+    parser.add_argument("--email-to", help="Send the HTML report here (default: $REPORT_EMAIL_TO)")
+    args = parser.parse_args()
+
+    for report_type in (PERIODS if args.type == "all" else [args.type]):
+        generate(report_type, args.email_to)
+    return 0
+
 
 if __name__ == "__main__":
-    main()
-
+    sys.exit(main())
