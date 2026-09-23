@@ -100,6 +100,7 @@ aws ec2 describe-instances --region us-east-1
 | Document | Purpose |
 |----------|---------|
 | [QUICKSTART.md](docs/QUICKSTART.md) | **Start here** — run the whole stack locally |
+| [DEPLOY-VPS.md](docs/DEPLOY-VPS.md) | Put it on a public VPS to capture **real** attacks |
 | [SETUP.md](docs/SETUP.md) | Native installation and configuration |
 | [ARCHITECTURE.md](docs/architecture.md) | System design and components |
 | [RBAC-POLICY.md](docs/RBAC-POLICY.md) | Roles, permissions, endpoint mapping |
