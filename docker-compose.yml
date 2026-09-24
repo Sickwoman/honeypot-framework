@@ -80,6 +80,12 @@ services:
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?set JWT_SECRET_KEY in .env (see .env.example)}
       ALERTS_DB_PATH: /var/lib/honeypot/alerts.db
       LOG_DIR: /var/log/honeypot
+      # The ingestor imports api.alerts_service for AlertService, and that import
+      # used to create the bootstrap admin as a side effect. It shares alerts.db
+      # with the api service over honeypot-data but has no ADMIN_PASSWORD, so
+      # whenever it won that race it created 'admin' with a random password and
+      # the configured password silently never applied. Only api bootstraps now.
+      HONEYPOT_BOOTSTRAP_ADMIN: "false"
       HONEYPOT_LOG_PATHS: /honeypot-logs/cowrie.log
       # Wait for Cowrie to create the log rather than exiting immediately.
       INGESTOR_WAIT_FOR_LOGS: "true"

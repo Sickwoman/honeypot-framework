@@ -23,8 +23,7 @@ These are the gaps that matter most; several are also tracked in
 
 | Item | Status | Notes |
 |---|---|---|
-| Verify the Docker stack end to end | ⬜ Open | `docker-compose.yml` and its images are authored but have never been built — Docker isn't installed on the dev machine. First person with Docker should run `docker compose up --build` and report breakage. |
-| Real captured attack data | ⬜ Open | The framework has never faced live internet traffic. Everything downstream — correlation, attack stories, the ML scripts — has only ever seen synthetic input. A cheap public VPS for a week or two would be the single highest-value addition to this project. |
+| Real captured attack data | ⬜ Open | The framework has never faced live internet traffic. Everything downstream — correlation, attack stories, the ML scripts — has only ever seen synthetic input. A cheap public VPS for a week or two would be the single highest-value addition to this project. Runbook: [docs/DEPLOY-VPS.md](docs/DEPLOY-VPS.md). |
 | ML model evaluation | ⬜ Open | `scripts/ml-anomaly-detection.py` runs Isolation Forest and DBSCAN, but the models are unsupervised with no labelled ground truth, so there are no real precision/recall numbers. See [docs/ML-ANALYTICS.md](docs/ML-ANALYTICS.md). |
 | PostgreSQL option | ⬜ Open | SQLite is fine for a single host; the driver pins are ready but commented out in `requirements.txt`. |
 | Frontend test coverage | ⬜ Open | `frontend/src/main.ts` is untested, including the `esc()` XSS guard. |

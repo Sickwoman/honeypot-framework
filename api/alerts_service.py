@@ -49,8 +49,26 @@ from api.auth_routes import auth_bp  # noqa: E402
 
 app.register_blueprint(auth_bp)
 
-# Ensure a bootstrap admin exists on first start (empty users table)
-UserManager().ensure_default_admin()
+# Ensure a bootstrap admin exists on first start (empty users table).
+#
+# Only the process that serves the API may do this. Importing this module has
+# the side effect of creating the admin, and the ingestor imports it too (for
+# AlertService), over the same alerts.db on the shared honeypot-data volume.
+# Whichever process imported first therefore won a race to create 'admin' --
+# and the ingestor has no ADMIN_PASSWORD, so when it won it created the admin
+# with a random generated password and the configured one never took effect.
+# Every later login with the configured password then failed with 401, which is
+# exactly what CI hit, intermittently, depending on who won.
+#
+# Default on, so running the API directly still bootstraps as before; the
+# ingestor turns it off explicitly in docker-compose.yml.
+BOOTSTRAP_ADMIN = os.getenv("HONEYPOT_BOOTSTRAP_ADMIN", "true").strip().lower() not in (
+    "0", "false", "no", "off",
+)
+if BOOTSTRAP_ADMIN:
+    UserManager().ensure_default_admin()
+else:
+    logger.info("HONEYPOT_BOOTSTRAP_ADMIN is off: not creating a bootstrap admin in this process")
 
 # Initialize audit logger
 audit_logger = AuditLogger()
