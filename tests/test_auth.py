@@ -198,3 +198,47 @@ def test_ensure_default_admin_still_raises_on_a_real_failure(user_manager, monke
 
     with pytest.raises(UserError):
         user_manager.ensure_default_admin()
+
+
+def test_a_process_without_admin_password_must_not_win_the_bootstrap(user_manager, monkeypatch):
+    """The CI failure this guards against.
+
+    The ingestor imports api.alerts_service for AlertService, which used to create
+    the bootstrap admin as an import side effect. It shares alerts.db with the api
+    service but carries no ADMIN_PASSWORD, so whenever it imported first it created
+    'admin' with a random generated password. The api workers then saw the user
+    already existed and skipped their own bootstrap, so the configured password
+    never applied and every login with it returned 401 -- intermittently, depending
+    on which container imported first.
+
+    This reproduces that ordering: a passwordless process bootstraps first, and the
+    configured password is then useless.
+    """
+    monkeypatch.delenv("ADMIN_PASSWORD", raising=False)
+    assert user_manager.ensure_default_admin() is not None       # the ingestor wins
+
+    monkeypatch.setenv("ADMIN_PASSWORD", "the-configured-password")
+    assert user_manager.ensure_default_admin() is None           # the api skips: user exists
+    assert user_manager.verify_credentials("admin", "the-configured-password") is None, (
+        "the configured password must not work -- this is the 401 CI saw, and the "
+        "reason only one process may bootstrap"
+    )
+
+
+def test_the_bootstrap_guard_lets_exactly_one_process_create_the_admin(monkeypatch):
+    """HONEYPOT_BOOTSTRAP_ADMIN is what keeps the ingestor out of the race."""
+    import importlib
+
+    def enabled(value: str | None) -> bool:
+        if value is None:
+            monkeypatch.delenv("HONEYPOT_BOOTSTRAP_ADMIN", raising=False)
+        else:
+            monkeypatch.setenv("HONEYPOT_BOOTSTRAP_ADMIN", value)
+        raw = os.getenv("HONEYPOT_BOOTSTRAP_ADMIN", "true").strip().lower()
+        return raw not in ("0", "false", "no", "off")
+
+    assert enabled(None) is True, "unset must keep the old behaviour for a direct API run"
+    assert enabled("true") is True
+    for off in ("false", "False", "0", "no", "off", " FALSE "):
+        assert enabled(off) is False, f"{off!r} must disable the bootstrap"
+    importlib.import_module("api.user_manager")     # the module still imports cleanly
