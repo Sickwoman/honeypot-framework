@@ -21,4 +21,6 @@ COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
 
 HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
-    CMD wget -qO- http://localhost/ >/dev/null || exit 1
+    # 127.0.0.1, not localhost: in this image localhost resolves to ::1 first,
+    # nginx.conf only listens on IPv4, and the check failed while the site was up.
+    CMD wget -qO- http://127.0.0.1/ >/dev/null || exit 1

