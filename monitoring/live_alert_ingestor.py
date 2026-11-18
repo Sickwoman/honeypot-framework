@@ -90,6 +90,119 @@ def parse_cowrie_line(line: str) -> Optional[Dict]:
     return None
 
 
+# Shell commands that fetch or launch a payload. Mirrors the alternatives the
+# text-log parser above looks for after "CMD:".
+_PAYLOAD_COMMAND = re.compile(
+    r"wget|curl|nc\s+-e|bash\s+-c|python\s+-c|powershell|chmod", re.IGNORECASE
+)
+
+
+def _cowrie_json_alert(
+    event: Dict,
+    alert_name: str,
+    severity: str,
+    threat_score: float,
+    description: str,
+    extra_metadata: Optional[Dict] = None,
+    threat_indicators: Optional[List[str]] = None,
+) -> Dict:
+    """Common alert shape for everything built from a Cowrie JSON event."""
+    metadata = {
+        "log_source": "cowrie",
+        "eventid": event.get("eventid"),
+        "session": event.get("session"),
+        **(extra_metadata or {}),
+        "raw_event": event,
+    }
+    alert = {
+        "alert_name": alert_name,
+        "severity": severity,
+        "status": "active",
+        "source_ip": event.get("src_ip"),
+        "source_port": event.get("src_port"),
+        "honeypot_type": "cowrie",
+        "service_name": event.get("protocol") or "ssh",
+        "description": description,
+        "metadata": metadata,
+        "event_count": 1,
+        "threat_score": threat_score,
+        "threat_level": severity,
+    }
+    if threat_indicators:
+        alert["threat_indicators"] = threat_indicators
+    return alert
+
+
+def parse_cowrie_json_event(event: Dict) -> Optional[Dict]:
+    """Convert one event from Cowrie's JSON log (cowrie.json) into an alert.
+
+    This is the log the official cowrie/cowrie Docker image actually writes:
+    it sends its text log to stdout, so cowrie.log never appears on disk there
+    and an ingestor waiting for it never produces a single alert. The JSON log
+    also records what the text log leaves out, the exact username and password
+    every login attempt used.
+
+    Connection, client-version and session-close events are deliberately not
+    alerts: every port scan produces them, and they carry no attacker intent.
+    """
+    eventid = str(event.get("eventid") or "")
+    username = str(event.get("username", ""))
+    password = str(event.get("password", ""))
+    credentials = {"username": username, "password": password}
+
+    if eventid == "cowrie.login.failed":
+        return _cowrie_json_alert(
+            event, "SSHBruteForce", "HIGH", 0.9,
+            f"Failed login attempt: {username} / {password}",
+            credentials, ["credential_capture"],
+        )
+
+    if eventid == "cowrie.login.success":
+        return _cowrie_json_alert(
+            event, "HoneypotLoginSuccess", "CRITICAL", 0.95,
+            f"Attacker logged in to the fake shell as {username} / {password}",
+            credentials, ["credential_capture"],
+        )
+
+    if eventid == "cowrie.command.input":
+        command = str(event.get("input", ""))
+        if _PAYLOAD_COMMAND.search(command):
+            return _cowrie_json_alert(
+                event, "MalwareDownloadAttempt", "CRITICAL", 0.97,
+                f"Payload command in honeypot shell: {command}",
+                {"command": command},
+            )
+        return _cowrie_json_alert(
+            event, "ShellCommandExecuted", "MEDIUM", 0.6,
+            f"Command in honeypot shell: {command}",
+            {"command": command},
+        )
+
+    if eventid == "cowrie.session.file_download":
+        url = str(event.get("url", ""))
+        return _cowrie_json_alert(
+            event, "MalwareSampleCaptured", "CRITICAL", 0.97,
+            f"Honeypot captured a downloaded file from {url}",
+            {"url": url, "shasum": event.get("shasum"), "outfile": event.get("outfile")},
+        )
+
+    return None
+
+
+def _as_cowrie_json_event(line: str) -> Optional[Dict]:
+    """Return the decoded event if this line is from Cowrie's JSON log."""
+    text = (line or "").strip()
+    if not text.startswith("{"):
+        return None
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    if isinstance(payload, dict) and str(payload.get("eventid", "")).startswith("cowrie."):
+        return payload
+    return None
+
+
 def parse_opencanary_line(line: str) -> Optional[Dict]:
     """Convert an OpenCanary JSON line into an alert payload when it represents activity."""
     text = (line or "").strip()
@@ -148,6 +261,13 @@ def parse_honeypot_line(line: str) -> Optional[Dict]:
     honeytoken_alert = parse_honeytoken_event(line)
     if honeytoken_alert:
         return honeytoken_alert
+    cowrie_event = _as_cowrie_json_event(line)
+    if cowrie_event is not None:
+        # A Cowrie JSON event is handled here or not at all. Falling through
+        # would misfile it: its "username"/"password" keys look like an
+        # OpenCanary credential capture, and its "CMD: ..." message matches
+        # the text-log parser, which would double-count payload commands.
+        return parse_cowrie_json_event(cowrie_event)
     parsed = parse_cowrie_line(line)
     if parsed:
         return parsed

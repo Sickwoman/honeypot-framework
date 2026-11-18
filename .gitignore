@@ -112,3 +112,6 @@ Thumbs.db
 attack-logs.json
 cost-estimate.json
 incident-*.md
+
+# Demo kit: set while start-demo has Cloudflare WARP turned on
+demo/.warp-turned-on-by-demo

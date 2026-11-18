@@ -25,8 +25,9 @@ services:
       # scripts/simulate-attacks.sh) here.
       - "${COWRIE_PORT:-2222}:2222"
     volumes:
-      # Cowrie writes cowrie.log (text, read by the ingestor) and cowrie.json
-      # (structured, read by Logstash under the elk profile) here.
+      # Cowrie writes cowrie.json here (structured; read by the ingestor, and
+      # by Logstash under the elk profile). Its text log goes to stdout:
+      #   docker compose logs -f cowrie
       - cowrie-logs:/cowrie/cowrie-git/var/log/cowrie
 
   # ----------------------------------------------------------------------- #
@@ -76,6 +77,11 @@ services:
       dockerfile: docker/api.Dockerfile
     restart: unless-stopped
     command: ["python", "-m", "monitoring.live_alert_ingestor"]
+    # The image's HEALTHCHECK curls the API on :8000, which this process doesn't
+    # serve, so the ingestor was always reported unhealthy. It is PID 1: if it
+    # dies the container exits and the restart policy brings it back.
+    healthcheck:
+      disable: true
     environment:
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?set JWT_SECRET_KEY in .env (see .env.example)}
       ALERTS_DB_PATH: /var/lib/honeypot/alerts.db
@@ -86,7 +92,10 @@ services:
       # whenever it won that race it created 'admin' with a random password and
       # the configured password silently never applied. Only api bootstraps now.
       HONEYPOT_BOOTSTRAP_ADMIN: "false"
-      HONEYPOT_LOG_PATHS: /honeypot-logs/cowrie.log
+      # cowrie.json, not cowrie.log: the cowrie/cowrie image sends its text log
+      # to stdout, so cowrie.log is never written to this volume and an
+      # ingestor tailing it waits forever without creating a single alert.
+      HONEYPOT_LOG_PATHS: /honeypot-logs/cowrie.json
       # Wait for Cowrie to create the log rather than exiting immediately.
       INGESTOR_WAIT_FOR_LOGS: "true"
       # Start at EOF so a restart doesn't replay the whole log as new alerts.

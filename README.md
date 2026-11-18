@@ -69,9 +69,9 @@ docker compose -f docker-compose.yml -f docker-compose.elk.yml up   # adds Elast
 Full walkthrough, including how to log in and generate test traffic:
 **[docs/QUICKSTART.md](docs/QUICKSTART.md)**.
 
-> The Compose stack is authored but not yet built end-to-end by the maintainer
-> (no Docker on the dev machine). The test suite, linting and the frontend
-> build are verified in CI.
+> CI builds and starts the Compose stack on every push, alongside the test
+> suite, linting and the frontend build. The full capture path (SSH into
+> Cowrie, alert in the API, playbook fires) has been run end to end on Docker.
 
 ### Native install (Ubuntu/Kali)
 

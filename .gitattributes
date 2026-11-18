@@ -23,3 +23,7 @@
 *.tfstate binary
 *.tfstate.* binary
 *.lock.hcl binary
+
+# Windows batch launchers (demo/*.cmd) need CRLF to run reliably in cmd.exe
+*.cmd text eol=crlf
+*.bat text eol=crlf
